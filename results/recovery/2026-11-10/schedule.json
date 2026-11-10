@@ -1,0 +1,605 @@
+{
+  "seed": 4253,
+  "runs": [
+    {
+      "repeat": 1,
+      "clients": 16,
+      "stall_clients": 0,
+      "stall_for": 4,
+      "policy": "baseline",
+      "directory": "n16-s0-p4-baseline-r1"
+    },
+    {
+      "repeat": 1,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 4,
+      "policy": "skip",
+      "directory": "n16-s8-p4-skip-r1"
+    },
+    {
+      "repeat": 1,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 0.25,
+      "policy": "terminate",
+      "directory": "n16-s8-p0.25-terminate-r1"
+    },
+    {
+      "repeat": 1,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 2,
+      "policy": "terminate",
+      "directory": "n16-s8-p2-terminate-r1"
+    },
+    {
+      "repeat": 1,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 0.25,
+      "policy": "skip",
+      "directory": "n16-s8-p0.25-skip-r1"
+    },
+    {
+      "repeat": 1,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 1,
+      "policy": "terminate",
+      "directory": "n16-s8-p1-terminate-r1"
+    },
+    {
+      "repeat": 1,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 2,
+      "policy": "baseline",
+      "directory": "n16-s8-p2-baseline-r1"
+    },
+    {
+      "repeat": 1,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 0.25,
+      "policy": "baseline",
+      "directory": "n16-s8-p0.25-baseline-r1"
+    },
+    {
+      "repeat": 1,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 1,
+      "policy": "skip",
+      "directory": "n16-s8-p1-skip-r1"
+    },
+    {
+      "repeat": 1,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 2,
+      "policy": "skip",
+      "directory": "n16-s8-p2-skip-r1"
+    },
+    {
+      "repeat": 1,
+      "clients": 16,
+      "stall_clients": 0,
+      "stall_for": 4,
+      "policy": "terminate",
+      "directory": "n16-s0-p4-terminate-r1"
+    },
+    {
+      "repeat": 1,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 1,
+      "policy": "baseline",
+      "directory": "n16-s8-p1-baseline-r1"
+    },
+    {
+      "repeat": 1,
+      "clients": 16,
+      "stall_clients": 0,
+      "stall_for": 4,
+      "policy": "skip",
+      "directory": "n16-s0-p4-skip-r1"
+    },
+    {
+      "repeat": 1,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 4,
+      "policy": "baseline",
+      "directory": "n16-s8-p4-baseline-r1"
+    },
+    {
+      "repeat": 1,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 4,
+      "policy": "terminate",
+      "directory": "n16-s8-p4-terminate-r1"
+    },
+    {
+      "repeat": 2,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 4,
+      "policy": "baseline",
+      "directory": "n16-s8-p4-baseline-r2"
+    },
+    {
+      "repeat": 2,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 2,
+      "policy": "baseline",
+      "directory": "n16-s8-p2-baseline-r2"
+    },
+    {
+      "repeat": 2,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 2,
+      "policy": "skip",
+      "directory": "n16-s8-p2-skip-r2"
+    },
+    {
+      "repeat": 2,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 4,
+      "policy": "skip",
+      "directory": "n16-s8-p4-skip-r2"
+    },
+    {
+      "repeat": 2,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 0.25,
+      "policy": "skip",
+      "directory": "n16-s8-p0.25-skip-r2"
+    },
+    {
+      "repeat": 2,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 2,
+      "policy": "terminate",
+      "directory": "n16-s8-p2-terminate-r2"
+    },
+    {
+      "repeat": 2,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 0.25,
+      "policy": "terminate",
+      "directory": "n16-s8-p0.25-terminate-r2"
+    },
+    {
+      "repeat": 2,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 0.25,
+      "policy": "baseline",
+      "directory": "n16-s8-p0.25-baseline-r2"
+    },
+    {
+      "repeat": 2,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 1,
+      "policy": "terminate",
+      "directory": "n16-s8-p1-terminate-r2"
+    },
+    {
+      "repeat": 2,
+      "clients": 16,
+      "stall_clients": 0,
+      "stall_for": 4,
+      "policy": "terminate",
+      "directory": "n16-s0-p4-terminate-r2"
+    },
+    {
+      "repeat": 2,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 4,
+      "policy": "terminate",
+      "directory": "n16-s8-p4-terminate-r2"
+    },
+    {
+      "repeat": 2,
+      "clients": 16,
+      "stall_clients": 0,
+      "stall_for": 4,
+      "policy": "baseline",
+      "directory": "n16-s0-p4-baseline-r2"
+    },
+    {
+      "repeat": 2,
+      "clients": 16,
+      "stall_clients": 0,
+      "stall_for": 4,
+      "policy": "skip",
+      "directory": "n16-s0-p4-skip-r2"
+    },
+    {
+      "repeat": 2,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 1,
+      "policy": "skip",
+      "directory": "n16-s8-p1-skip-r2"
+    },
+    {
+      "repeat": 2,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 1,
+      "policy": "baseline",
+      "directory": "n16-s8-p1-baseline-r2"
+    },
+    {
+      "repeat": 3,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 1,
+      "policy": "baseline",
+      "directory": "n16-s8-p1-baseline-r3"
+    },
+    {
+      "repeat": 3,
+      "clients": 16,
+      "stall_clients": 0,
+      "stall_for": 4,
+      "policy": "terminate",
+      "directory": "n16-s0-p4-terminate-r3"
+    },
+    {
+      "repeat": 3,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 0.25,
+      "policy": "skip",
+      "directory": "n16-s8-p0.25-skip-r3"
+    },
+    {
+      "repeat": 3,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 1,
+      "policy": "skip",
+      "directory": "n16-s8-p1-skip-r3"
+    },
+    {
+      "repeat": 3,
+      "clients": 16,
+      "stall_clients": 0,
+      "stall_for": 4,
+      "policy": "skip",
+      "directory": "n16-s0-p4-skip-r3"
+    },
+    {
+      "repeat": 3,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 0.25,
+      "policy": "terminate",
+      "directory": "n16-s8-p0.25-terminate-r3"
+    },
+    {
+      "repeat": 3,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 1,
+      "policy": "terminate",
+      "directory": "n16-s8-p1-terminate-r3"
+    },
+    {
+      "repeat": 3,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 2,
+      "policy": "baseline",
+      "directory": "n16-s8-p2-baseline-r3"
+    },
+    {
+      "repeat": 3,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 4,
+      "policy": "skip",
+      "directory": "n16-s8-p4-skip-r3"
+    },
+    {
+      "repeat": 3,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 4,
+      "policy": "baseline",
+      "directory": "n16-s8-p4-baseline-r3"
+    },
+    {
+      "repeat": 3,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 0.25,
+      "policy": "baseline",
+      "directory": "n16-s8-p0.25-baseline-r3"
+    },
+    {
+      "repeat": 3,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 4,
+      "policy": "terminate",
+      "directory": "n16-s8-p4-terminate-r3"
+    },
+    {
+      "repeat": 3,
+      "clients": 16,
+      "stall_clients": 0,
+      "stall_for": 4,
+      "policy": "baseline",
+      "directory": "n16-s0-p4-baseline-r3"
+    },
+    {
+      "repeat": 3,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 2,
+      "policy": "skip",
+      "directory": "n16-s8-p2-skip-r3"
+    },
+    {
+      "repeat": 3,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 2,
+      "policy": "terminate",
+      "directory": "n16-s8-p2-terminate-r3"
+    },
+    {
+      "repeat": 4,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 1,
+      "policy": "terminate",
+      "directory": "n16-s8-p1-terminate-r4"
+    },
+    {
+      "repeat": 4,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 2,
+      "policy": "baseline",
+      "directory": "n16-s8-p2-baseline-r4"
+    },
+    {
+      "repeat": 4,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 1,
+      "policy": "skip",
+      "directory": "n16-s8-p1-skip-r4"
+    },
+    {
+      "repeat": 4,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 4,
+      "policy": "skip",
+      "directory": "n16-s8-p4-skip-r4"
+    },
+    {
+      "repeat": 4,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 4,
+      "policy": "terminate",
+      "directory": "n16-s8-p4-terminate-r4"
+    },
+    {
+      "repeat": 4,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 0.25,
+      "policy": "baseline",
+      "directory": "n16-s8-p0.25-baseline-r4"
+    },
+    {
+      "repeat": 4,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 0.25,
+      "policy": "skip",
+      "directory": "n16-s8-p0.25-skip-r4"
+    },
+    {
+      "repeat": 4,
+      "clients": 16,
+      "stall_clients": 0,
+      "stall_for": 4,
+      "policy": "baseline",
+      "directory": "n16-s0-p4-baseline-r4"
+    },
+    {
+      "repeat": 4,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 0.25,
+      "policy": "terminate",
+      "directory": "n16-s8-p0.25-terminate-r4"
+    },
+    {
+      "repeat": 4,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 2,
+      "policy": "terminate",
+      "directory": "n16-s8-p2-terminate-r4"
+    },
+    {
+      "repeat": 4,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 4,
+      "policy": "baseline",
+      "directory": "n16-s8-p4-baseline-r4"
+    },
+    {
+      "repeat": 4,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 2,
+      "policy": "skip",
+      "directory": "n16-s8-p2-skip-r4"
+    },
+    {
+      "repeat": 4,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 1,
+      "policy": "baseline",
+      "directory": "n16-s8-p1-baseline-r4"
+    },
+    {
+      "repeat": 4,
+      "clients": 16,
+      "stall_clients": 0,
+      "stall_for": 4,
+      "policy": "skip",
+      "directory": "n16-s0-p4-skip-r4"
+    },
+    {
+      "repeat": 4,
+      "clients": 16,
+      "stall_clients": 0,
+      "stall_for": 4,
+      "policy": "terminate",
+      "directory": "n16-s0-p4-terminate-r4"
+    },
+    {
+      "repeat": 5,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 1,
+      "policy": "baseline",
+      "directory": "n16-s8-p1-baseline-r5"
+    },
+    {
+      "repeat": 5,
+      "clients": 16,
+      "stall_clients": 0,
+      "stall_for": 4,
+      "policy": "terminate",
+      "directory": "n16-s0-p4-terminate-r5"
+    },
+    {
+      "repeat": 5,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 4,
+      "policy": "skip",
+      "directory": "n16-s8-p4-skip-r5"
+    },
+    {
+      "repeat": 5,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 4,
+      "policy": "baseline",
+      "directory": "n16-s8-p4-baseline-r5"
+    },
+    {
+      "repeat": 5,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 2,
+      "policy": "terminate",
+      "directory": "n16-s8-p2-terminate-r5"
+    },
+    {
+      "repeat": 5,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 2,
+      "policy": "skip",
+      "directory": "n16-s8-p2-skip-r5"
+    },
+    {
+      "repeat": 5,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 0.25,
+      "policy": "skip",
+      "directory": "n16-s8-p0.25-skip-r5"
+    },
+    {
+      "repeat": 5,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 1,
+      "policy": "skip",
+      "directory": "n16-s8-p1-skip-r5"
+    },
+    {
+      "repeat": 5,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 2,
+      "policy": "baseline",
+      "directory": "n16-s8-p2-baseline-r5"
+    },
+    {
+      "repeat": 5,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 1,
+      "policy": "terminate",
+      "directory": "n16-s8-p1-terminate-r5"
+    },
+    {
+      "repeat": 5,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 4,
+      "policy": "terminate",
+      "directory": "n16-s8-p4-terminate-r5"
+    },
+    {
+      "repeat": 5,
+      "clients": 16,
+      "stall_clients": 0,
+      "stall_for": 4,
+      "policy": "skip",
+      "directory": "n16-s0-p4-skip-r5"
+    },
+    {
+      "repeat": 5,
+      "clients": 16,
+      "stall_clients": 0,
+      "stall_for": 4,
+      "policy": "baseline",
+      "directory": "n16-s0-p4-baseline-r5"
+    },
+    {
+      "repeat": 5,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 0.25,
+      "policy": "baseline",
+      "directory": "n16-s8-p0.25-baseline-r5"
+    },
+    {
+      "repeat": 5,
+      "clients": 16,
+      "stall_clients": 8,
+      "stall_for": 0.25,
+      "policy": "terminate",
+      "directory": "n16-s8-p0.25-terminate-r5"
+    }
+  ]
+}
