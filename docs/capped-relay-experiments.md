@@ -100,6 +100,8 @@ The client stall pauses MoQT session processing while Quinn continues transport 
 
 The script writes `schedule.json`, runs each condition, and then invokes the analyzer. It stops on an unexpected failure and keeps the outputs produced so far. Expect at least ten minutes of client measurement, plus startup and cleanup. A custom `--out` path must not already exist.
 
+Keep the host awake for the entire matrix. On macOS, prefix the command with `caffeinate -dims` for temporary sleep prevention. This cannot guarantee that the machine will remain available under every condition. Both the runner and analyzer reject a client's wall-clock observation duration if it differs from the planned interval by more than 0.5 seconds. A laptop suspension or large clock jump otherwise misplaces Objects into analysis phases even when every process exits successfully. Do not merge an interrupted matrix with selected successful runs without reporting that change to the experiment procedure.
+
 At about 4 Mbit/s per subscriber, 16 subscribers request approximately 64 Mbit/s of media before overhead. An 80 Mbit/s cap therefore leaves room for normal traffic while making extra catch-up traffic compete for a finite budget. That reasoning is a workload design choice, not evidence that the cap was saturated: check the measured rate. A separate run at `--egress-mbps 40` would deliberately make all 16 full-rate subscriptions infeasible. Under that condition, do not demand full quality for every subscriber or interpret every termination as accidental. Change one parameter at a time and keep the healthy-only controls.
 
 ## Analyze without hiding terminated clients
