@@ -44,28 +44,35 @@ def main():
                 "binary": str(binary), "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
                 "build_command": command,
                 "rustc": subprocess.check_output(["rustc", "+1.90.0", "--version"], text=True).strip()}
+    manifest_path = build / "build.json"
     if args.build_client:
-        client = build / "client"
-        (client / "src").mkdir(parents=True, exist_ok=True)
         files = ["Cargo.toml", "Cargo.lock", "src/main.rs"]
         client_digest = hashlib.sha256()
+        contents = {name: (ROOT / name).read_bytes() for name in files}
         for name in files:
-            data = (ROOT / name).read_bytes()
+            data = contents[name]
             client_digest.update(name.encode() + b"\0" + data)
+        client = build / "clients" / client_digest.hexdigest()[:16]
+        (client / "src").mkdir(parents=True, exist_ok=True)
+        for name, data in contents.items():
             if name == "Cargo.toml":
-                data = data.replace(b'vendor/moq-rs/', b'../source/')
+                data = data.replace(b'vendor/moq-rs/', b'../../source/')
+            if (client / name).exists() and (client / name).read_bytes() != data:
+                raise RuntimeError(f"unexpected edit in preserved client source: {client / name}")
             (client / name).write_bytes(data)
         client_target = ROOT / ".local/client-variant-target"
         client_env = {**os.environ, "CARGO_TARGET_DIR": str(client_target)}
         for operation in ("test", "build"):
             subprocess.run(["cargo", "+1.90.0", operation, "--release", "--locked", "--features", "live-resync"],
                            cwd=client, env=client_env, check=True)
-        client_binary = build / "moqt-load"
+        client_binary = client / "moqt-load"
         shutil.copy2(client_target / "release/moqt-load", client_binary)
         manifest.update(client_binary=str(client_binary),
                         client_binary_sha256=hashlib.sha256(client_binary.read_bytes()).hexdigest(),
                         client_source_sha256=client_digest.hexdigest(), client_features=["live-resync"])
-    (build / "build.json").write_text(json.dumps(manifest, indent=2) + "\n")
+        manifest_path = client / "build.json"
+    manifest["manifest_path"] = str(manifest_path)
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
     print(json.dumps(manifest, indent=2))
 
 

@@ -3,7 +3,7 @@
 use anyhow::{bail, ensure, Context, Result};
 use bytes::Bytes;
 use clap::{Args, Parser, Subcommand};
-use futures::{stream::FuturesUnordered, StreamExt};
+use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
 use moq_transport::{
     coding::{KeyValuePairs, TrackNamespace},
     serve::{ServeError, Track, TrackReader, TrackReaderMode},
@@ -406,6 +406,16 @@ async fn subscriber(args: SubscribeArgs, index: usize) -> Result<()> {
             biased;
             result=subscription.closed()=>{
                 if let Some(code) = policy_termination_code(&result).filter(|_| args.allow_policy_termination) {
+                    // Do not let a simultaneously ready terminal response hide
+                    // an already-available corrupt/truncated media result.
+                    if delivery_error.is_none() {
+                        if let Some(result) = receiver.as_mut().now_or_never() {
+                            let message = checked_terminal_read(result)?;
+                            emit(json!({"type":"delivery_error","client":client,"cohort":cohort,
+                                "error":message,"timestamp_unix_us":unix_us()?}))?;
+                            delivery_error = Some(message);
+                        }
+                    }
                     termination_code = Some(code);
                     emit(json!({"type":"subscription_terminated","client":client,"cohort":cohort,
                         "status_code":code,"reason":"too_far_behind","timestamp_unix_us":unix_us()?,
@@ -477,13 +487,25 @@ fn expected_terminal_read_error(error: &anyhow::Error) -> bool {
     ) {
         return true;
     }
-    // Upstream drops an unfinished object writer on RESET_STREAM, exposing
-    // ServeError::Size. That object is lost, never counted as delivered. Still
-    // require the separate PUBLISH_DONE(6); payload validation is not deferred.
+    // Only the stock library conflates a partial stream reset with Size. The
+    // patched receiver preserves Reset separately, so Size must be fatal there.
+    #[cfg(not(feature = "live-resync"))]
+    if matches!(error.downcast_ref::<ServeError>(), Some(ServeError::Size)) {
+        return true;
+    }
     matches!(
         error.downcast_ref::<ServeError>(),
-        Some(ServeError::Cancel | ServeError::Size | ServeError::Closed(6))
+        Some(ServeError::Cancel | ServeError::Closed(6))
     )
+}
+fn checked_terminal_read(result: Result<()>) -> Result<String> {
+    let error = result
+        .err()
+        .unwrap_or_else(|| anyhow::anyhow!("media reader ended early"));
+    if !expected_terminal_read_error(&error) {
+        return Err(error);
+    }
+    Ok(format!("{error:#}"))
 }
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -528,6 +550,10 @@ mod tests {
     #[cfg(feature = "live-resync")]
     #[test]
     fn only_delivery_timeout_resets_are_recoverable() {
+        assert!(!expected_terminal_read_error(&anyhow::Error::new(
+            ServeError::Size
+        )));
+        assert!(checked_terminal_read(Err(anyhow::Error::new(ServeError::Size))).is_err());
         assert!(delivery_reset(&ServeError::Reset(2)));
         for error in [
             ServeError::Reset(1),
@@ -540,12 +566,14 @@ mod tests {
     }
     #[test]
     fn a_stream_error_is_not_a_policy_termination() {
+        assert!(checked_terminal_read(Err(anyhow::anyhow!("payload corrupt"))).is_err());
         assert!(!expected_terminal_read_error(&anyhow::anyhow!(
             "payload corruption"
         )));
         assert!(expected_terminal_read_error(&anyhow::Error::new(
             ServeError::Cancel
         )));
+        #[cfg(not(feature = "live-resync"))]
         assert!(expected_terminal_read_error(&anyhow::Error::new(
             ServeError::Size
         )));
