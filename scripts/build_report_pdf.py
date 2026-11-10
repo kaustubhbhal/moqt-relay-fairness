@@ -80,7 +80,17 @@ def main():
                 ("TOPPADDING", (0, 0), (-1, -1), 6),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
             ]))
-            story.extend([table, Spacer(1, 9)])
+            caption_index = i
+            while caption_index < len(lines) and not lines[caption_index].strip():
+                caption_index += 1
+            if caption_index < len(lines) and lines[caption_index].startswith("*Table"):
+                story.append(KeepTogether([
+                    table, Spacer(1, 5),
+                    Paragraph(inline(lines[caption_index]), caption),
+                ]))
+                i = caption_index + 1
+            else:
+                story.extend([table, Spacer(1, 9)])
             continue
         match = re.fullmatch(r"!\[[^\]]*\]\(([^)]+)\)", line)
         if match:

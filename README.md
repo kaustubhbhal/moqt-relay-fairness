@@ -2,7 +2,7 @@
 
 CS 4251 Group 16's experiment setup for studying how stalled subscribers affect a Media over QUIC relay.
 
-The first milestone measures the existing relay. The second adds a shared UDP egress cap and an optional fixed subscription timeout. Neither implements the cross-session scheduler proposed in Progress Report 1 yet. We use actual QUIC connections and synthetic, paced media objects; these are transport experiments, not video playback tests.
+The first milestone measures the existing relay. The second adds a shared UDP egress cap and an optional fixed subscription timeout. The third skips expired media streams so stalled clients can return to live on the same subscription. DRR and adaptive resource budgets are not implemented yet. We use actual QUIC connections and synthetic, paced media objects; these are transport experiments, not video playback tests.
 
 Cloudflare's relay is pinned to draft-16 revision `3b2b584b47e4a18f3a6bf48dc9a665c736743443` under `vendor/moq-rs`. Keeping the version fixed makes repeated experiments comparable with our submitted report. Initialize it with `git submodule update --init --recursive` after cloning.
 
@@ -10,7 +10,7 @@ See [the experiment design](docs/experiment-design.md), [measurement notes](docs
 
 For the patched relay, see [the capped-relay comparison](docs/capped-relay-experiments.md). It includes a separate reproducible build, identical-cap comparisons, and termination accounting that retains disconnected clients in throughput denominators.
 
-**Completed:** 20 baseline runs with 16 or 64 subscribers, plus [20 capped-policy runs](results/policy/2026-11-10/README.md) with 16 subscribers. Under the 80 Mbit/s cap, a three-second timeout reduced median healthy-client recovery P99 from 190 ms to 11 ms, while terminating all paused subscriptions. Healthy clients stayed close to the source rate; paused clients received substantial late backlog after resuming. Read the [results and raw data](results/preliminary/2026-11-10/README.md), [Progress Report 2 draft](docs/progress-report-2.md), or [formatted PDF](output/pdf/progress-report-2-group-16.pdf).
+**Completed:** 20 baseline runs, 20 capped-policy runs, and [75 short-pause recovery runs](results/recovery/2026-11-10/README.md). With four-second pauses and an 80 Mbit/s cap, skip recovered all 40 paused clients without disconnecting them and reduced median healthy-client P99 from 174 to 48 ms. Recovery varied: skip's run medians ranged from 5 ms to 2.104 seconds. Shorter pauses did not activate the three-second policy. See the [implementation guide](docs/live-recovery-experiments.md), [Progress Report 2 draft](docs/progress-report-2.md), or [formatted PDF](output/pdf/progress-report-2-group-16.pdf).
 
 ## Build
 
@@ -82,4 +82,4 @@ To regenerate the report PDF and figures, install the optional `requirements-rep
 - `vendor/moq-rs`: unchanged, pinned upstream source.
 - `results/`: raw experiments and selected evidence; generated local/ICE runs are ignored by default.
 
-The shared egress cap and fixed forwarding timeout are implemented as an isolated patch. Session scheduling and adaptive backlog limits remain next steps. Neither DRR nor the adaptive policy is implemented here yet.
+The shared egress cap, fixed forwarding timeout, and same-subscription recovery are implemented as isolated patches. Session scheduling and adaptive backlog limits remain next steps. Neither DRR nor the adaptive policy is implemented here yet.
