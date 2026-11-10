@@ -57,6 +57,16 @@ def cpu_seconds(value):
     return total + int(days) * 86400
 
 
+def physical_memory_bytes():
+    if platform.system() == "Darwin":
+        value = command_output(["sysctl", "-n", "hw.memsize"])
+        return int(value) if value and value.isdigit() else None
+    try:
+        return os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")
+    except (ValueError, OSError):
+        return None
+
+
 def sample_process(proc, role):
     result = subprocess.run(["ps", "-p", str(proc.pid), "-o", "rss=", "-o", "time="],
                             text=True, capture_output=True)
@@ -131,7 +141,7 @@ def main():
                 "host": {"platform": platform.platform(), "machine": platform.machine(),
                          "logical_cpus": os.cpu_count(),
                          "cpu_model": command_output(["sysctl", "-n", "machdep.cpu.brand_string"]) if platform.system() == "Darwin" else command_output(["lscpu"]),
-                         "memory_bytes": command_output(["sysctl", "-n", "hw.memsize"]) if platform.system() == "Darwin" else command_output(["getconf", "_PHYS_PAGES"])},
+                         "memory_bytes": physical_memory_bytes()},
                 "binary_sha256": {name: hashlib.sha256(path.read_bytes()).hexdigest()
                                   for name, path in (("relay", relay), ("load", load))},
                 "clock": "publisher and subscribers share one host wall clock",

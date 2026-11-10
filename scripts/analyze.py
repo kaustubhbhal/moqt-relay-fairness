@@ -70,6 +70,8 @@ def summarize_run(path, deadline_ms=150):
     if manifest["status"] != "complete":
         raise ValueError(f"{path}: run is {manifest['status']}; do not silently include failed runs")
     config = manifest["config"]
+    if config["stall_clients"] > config["clients"] // 2:
+        raise ValueError("fixed upper-half healthy comparison requires at most half the clients stalled")
     records = read_events(path / "subscribers.jsonl")
     expected = set(range(config["clients"]))
     ready_records = [e for e in records if e.get("type") == "ready"]
@@ -87,7 +89,9 @@ def summarize_run(path, deadline_ms=150):
               "all": expected}
     if config["stall_clients"]:
         groups["stalled"] = set(range(config["stall_clients"]))
-    process = [e for e in read_events(path / "process.jsonl") if e["role"] == "relay"]
+    process_all = read_events(path / "process.jsonl")
+    process = [e for e in process_all if e["role"] == "relay"]
+    published = [e for e in read_events(path / "publisher.jsonl") if e.get("type") == "published"]
     anchor = statistics.median(ready.values())
     rows = []
     for phase, (start, end) in phases.items():
@@ -97,13 +101,22 @@ def summarize_run(path, deadline_ms=150):
         if len(samples) > 1:
             wall = (samples[-1]["timestamp_unix_us"] - samples[0]["timestamp_unix_us"]) / 1e6
             cpu = 100 * (samples[-1]["cpu_seconds"] - samples[0]["cpu_seconds"]) / wall
+        source = [e for e in published if start <= (e["sent_unix_us"] - anchor) / 1e6 < end]
+        role_cpu = {}
+        for role in ("publisher", "subscribers"):
+            points = [e for e in process_all if e["role"] == role and start <= (e["timestamp_unix_us"] - anchor) / 1e6 < end]
+            role_cpu[role + "_cpu_percent_one_core"] = (100 * (points[-1]["cpu_seconds"] - points[0]["cpu_seconds"]) /
+                                                       ((points[-1]["timestamp_unix_us"] - points[0]["timestamp_unix_us"]) / 1e6)) if len(points) > 1 else None
         for cohort, ids in groups.items():
             row = {"run": path.name, "total_clients": config["clients"],
                    "stall_clients": config["stall_clients"], "phase": phase, "cohort": cohort,
                    "phase_seconds": end - start,
                    "relay_rss_peak_mib": max(rss) if rss else None,
                    "relay_rss_median_mib": statistics.median(rss) if rss else None,
-                   "relay_cpu_percent_one_core": cpu}
+                   "relay_cpu_percent_one_core": cpu,
+                   "publisher_actual_objects_per_second": len(source) / (end - start),
+                   "publisher_actual_mbps": sum(e["bytes"] for e in source) * 8 / (end - start) / 1e6,
+                   **role_cpu}
             row.update(summarize_phase(records, ready, ids, start, end, deadline_ms))
             rows.append(row)
     stats = [e for e in records if e.get("type") == "quic_stats"]
