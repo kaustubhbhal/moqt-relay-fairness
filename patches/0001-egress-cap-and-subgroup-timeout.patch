@@ -1,0 +1,1054 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 92f65c0..4c39570 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -1751,6 +1751,7 @@ dependencies = [
+  "moq-native-ietf",
+  "moq-transport",
+  "p256",
++ "quinn",
+  "rcgen",
+  "rustls 0.23.31",
+  "secrecy",
+diff --git a/moq-relay-ietf/Cargo.toml b/moq-relay-ietf/Cargo.toml
+index 4a08799..45a51fd 100644
+--- a/moq-relay-ietf/Cargo.toml
++++ b/moq-relay-ietf/Cargo.toml
+@@ -27,6 +27,7 @@ moq-transport = { path = "../moq-transport", version = "0.16" }
+ moq-native-ietf = { path = "../moq-native-ietf", version = "0.10" }
+ moq-api = { path = "../moq-api", version = "0.2" }
+ web-transport = { workspace = true }
++quinn = { version = "0.11.9", features = ["ring"] }
+ 
+ # Bearer tokens are held in a type that zeroizes on drop and redacts under
+ # Debug. Not optional: the enforcement points compile without `auth-cat`, so
+diff --git a/moq-relay-ietf/src/bin/moq-relay-ietf/main.rs b/moq-relay-ietf/src/bin/moq-relay-ietf/main.rs
+index 9508cb2..1999faf 100644
+--- a/moq-relay-ietf/src/bin/moq-relay-ietf/main.rs
++++ b/moq-relay-ietf/src/bin/moq-relay-ietf/main.rs
+@@ -100,6 +100,20 @@ pub struct Cli {
+     #[arg(long)]
+     pub metrics_addr: Option<net::SocketAddr>,
+ 
++    /// Experimental aggregate outgoing UDP-payload cap, in decimal Mbit/s.
++    /// Includes QUIC control traffic and retransmissions; excludes IP overhead.
++    #[arg(long)]
++    pub egress_mbps: Option<f64>,
++
++    /// Maximum token-bucket burst; identical across experimental policies.
++    #[arg(long, default_value_t = 65536)]
++    pub egress_burst_bytes: usize,
++
++    /// End a subscription if a subgroup remains unacknowledged this long.
++    /// Starts when downstream forwarding observes the subgroup, not at source creation.
++    #[arg(long)]
++    pub max_subgroup_age_ms: Option<u64>,
++
+     /// JSON file of per-scope Common Access Token (CAT) policies.
+     ///
+     /// When set, scopes the file configures require a valid CAT in the
+@@ -128,6 +142,28 @@ async fn main() -> anyhow::Result<()> {
+         .init();
+ 
+     let cli = Cli::parse();
++    anyhow::ensure!(
++        cli.max_subgroup_age_ms != Some(0),
++        "subgroup age must be positive"
++    );
++    let egress_rate = if let Some(mbps) = cli.egress_mbps {
++        anyhow::ensure!(
++            mbps.is_finite() && mbps > 0.0,
++            "egress rate must be finite and positive"
++        );
++        let bytes = mbps * 1_000_000.0 / 8.0;
++        anyhow::ensure!(
++            bytes >= 1.0 && bytes < u64::MAX as f64,
++            "egress rate out of range"
++        );
++        anyhow::ensure!(
++            cli.egress_burst_bytes >= 65536,
++            "egress burst must be at least 65536 bytes"
++        );
++        Some(bytes as u64)
++    } else {
++        None
++    };
+ 
+     // Checked before anything else so a relay that cannot enforce the
+     // requested policy never starts listening.
+@@ -227,12 +263,31 @@ async fn main() -> anyhow::Result<()> {
+         )
+     };
+ 
++    // One shared socket bucket limits all connections on this endpoint.
++    // Keep the ordinary endpoint construction untouched when the cap is off.
++    let endpoints = if let Some(rate) = egress_rate {
++        let burst = cli.egress_burst_bytes;
++        let config =
++            moq_native_ietf::quic::Config::new(cli.bind, qlog_dir_for_relay.clone(), tls.clone())?
++                .with_socket_wrapper(move |socket| {
++                    moq_relay_ietf::egress::EgressSocket::wrap(socket, rate, burst)
++                        .expect("validated nonzero egress configuration")
++                });
++        vec![moq_native_ietf::quic::Endpoint::new(config)?]
++    } else {
++        vec![]
++    };
++
+     // Create a QUIC server for media.
+     let relay = Relay::new_with_cache_idle_timeout(
+         RelayConfig {
+             tls: tls.clone(),
+-            bind: Some(cli.bind),
+-            endpoints: vec![],
++            bind: if endpoints.is_empty() {
++                Some(cli.bind)
++            } else {
++                None
++            },
++            endpoints,
+             qlog_dir: qlog_dir_for_relay,
+             mlog_dir: mlog_dir_for_relay,
+             node: cli.node,
+@@ -247,7 +302,8 @@ async fn main() -> anyhow::Result<()> {
+             connection_tagger: None,
+         },
+         Duration::from_secs(cli.cache_idle_timeout),
+-    )?;
++    )?
++    .with_subgroup_timeout(cli.max_subgroup_age_ms.map(Duration::from_millis));
+ 
+     if cli.dev {
+         // Create a web server too.
+diff --git a/moq-relay-ietf/src/egress.rs b/moq-relay-ietf/src/egress.rs
+new file mode 100644
+index 0000000..3308249
+--- /dev/null
++++ b/moq-relay-ietf/src/egress.rs
+@@ -0,0 +1,412 @@
++// SPDX-FileCopyrightText: 2026 Cloudflare Inc. and contributors
++// SPDX-License-Identifier: MIT OR Apache-2.0
++
++//! Aggregate UDP-payload service budget, shared by every connection on a socket.
++//!
++//! ACKs, control packets, and retransmissions consume this budget. IP and link
++//! headers do not. This is not a physical-link emulator or a fair/FIFO scheduler.
++//! No packet payload is copied or queued here; Quinn retains blocked transmits.
++
++use std::{
++    future::Future,
++    io::{self, IoSliceMut},
++    net::SocketAddr,
++    pin::Pin,
++    sync::{Arc, Mutex},
++    task::{Context, Poll},
++    time::Duration,
++};
++
++use quinn::{
++    udp::{RecvMeta, Transmit},
++    AsyncUdpSocket, UdpPoller,
++};
++use tokio::time::{Instant, Sleep};
++
++const NANOS_PER_SECOND: u128 = 1_000_000_000;
++
++#[derive(Debug)]
++struct Bucket {
++    credit: u128,
++    updated: Instant,
++    // UdpPoller has no pending-transmit argument. Waiting for the largest
++    // previously throttled datagram avoids waking at every single-byte refill.
++    // A smaller sender may wait longer; no per-connection fairness is promised.
++    readiness_bytes: usize,
++}
++
++/// A Tokio-backed rate limiter for a single shared Quinn UDP socket.
++#[derive(Debug)]
++pub struct EgressSocket {
++    inner: Arc<dyn AsyncUdpSocket>,
++    rate: u64,
++    burst: usize,
++    bucket: Mutex<Bucket>,
++}
++
++impl EgressSocket {
++    /// Start with a full bucket. A 65,536-byte burst admits any normal UDP
++    /// datagram; smaller bursts are allowed but oversized sends fail explicitly.
++    pub fn wrap(
++        inner: Arc<dyn AsyncUdpSocket>,
++        bytes_per_second: u64,
++        burst_bytes: usize,
++    ) -> io::Result<Arc<dyn AsyncUdpSocket>> {
++        if bytes_per_second == 0 || burst_bytes == 0 {
++            return Err(io::Error::new(
++                io::ErrorKind::InvalidInput,
++                "egress rate and burst must be positive",
++            ));
++        }
++        metrics::gauge!("moq_relay_egress_limit_bytes_per_second").set(bytes_per_second as f64);
++        metrics::gauge!("moq_relay_egress_burst_bytes").set(burst_bytes as f64);
++        Ok(Arc::new(Self {
++            inner,
++            rate: bytes_per_second,
++            burst: burst_bytes,
++            bucket: Mutex::new(Bucket {
++                credit: burst_bytes as u128 * NANOS_PER_SECOND,
++                updated: Instant::now(),
++                readiness_bytes: 1,
++            }),
++        }))
++    }
++
++    fn refill(&self, bucket: &mut Bucket, now: Instant) {
++        let elapsed = now.duration_since(bucket.updated).as_nanos();
++        bucket.credit = bucket
++            .credit
++            .saturating_add(elapsed.saturating_mul(self.rate as u128))
++            .min(self.burst as u128 * NANOS_PER_SECOND);
++        bucket.updated = now;
++    }
++
++    fn ready_deadline(&self) -> io::Result<Option<Instant>> {
++        let mut bucket = self
++            .bucket
++            .lock()
++            .map_err(|_| io::Error::other("egress bucket lock poisoned"))?;
++        let now = Instant::now();
++        self.refill(&mut bucket, now);
++        let required = bucket.readiness_bytes as u128 * NANOS_PER_SECOND;
++        if bucket.credit >= required {
++            return Ok(None);
++        }
++        let nanos = (required - bucket.credit).div_ceil(self.rate as u128);
++        // readiness_bytes never exceeds a legal datagram, so this is at most
++        // 65,535 seconds even at one byte/second. Ceil preserves low-rate wakes.
++        let delay = Duration::new(
++            (nanos / NANOS_PER_SECOND) as u64,
++            (nanos % NANOS_PER_SECOND) as u32,
++        );
++        Ok(Some(now + delay))
++    }
++}
++
++impl AsyncUdpSocket for EgressSocket {
++    fn create_io_poller(self: Arc<Self>) -> Pin<Box<dyn UdpPoller>> {
++        let inner = self.inner.clone().create_io_poller();
++        Box::pin(EgressPoller {
++            socket: self,
++            inner,
++            sleep: None,
++        })
++    }
++
++    fn try_send(&self, transmit: &Transmit<'_>) -> io::Result<()> {
++        let bytes = transmit.contents.len();
++        if bytes > self.burst || bytes > u16::MAX as usize {
++            return Err(io::Error::new(
++                io::ErrorKind::InvalidInput,
++                "UDP transmit exceeds egress burst or datagram size",
++            ));
++        }
++        if transmit.segment_size.is_some_and(|size| size < bytes) {
++            return Err(io::Error::new(
++                io::ErrorKind::InvalidInput,
++                "egress shaper does not accept segmented UDP transmits",
++            ));
++        }
++        let mut bucket = self
++            .bucket
++            .lock()
++            .map_err(|_| io::Error::other("egress bucket lock poisoned"))?;
++        self.refill(&mut bucket, Instant::now());
++        let charge = bytes as u128 * NANOS_PER_SECOND;
++        if bucket.credit < charge {
++            bucket.readiness_bytes = bucket.readiness_bytes.max(bytes);
++            metrics::counter!("moq_relay_egress_throttled_total").increment(1);
++            return Err(io::ErrorKind::WouldBlock.into());
++        }
++        // Nonblocking send under the short mutex makes successful sends and
++        // charges atomic across connections. Failed OS sends spend no credit.
++        self.inner.try_send(transmit)?;
++        bucket.credit -= charge;
++        metrics::counter!("moq_relay_egress_udp_bytes_total").increment(bytes as u64);
++        Ok(())
++    }
++
++    fn poll_recv(
++        &self,
++        cx: &mut Context<'_>,
++        bufs: &mut [IoSliceMut<'_>],
++        meta: &mut [RecvMeta],
++    ) -> Poll<io::Result<usize>> {
++        self.inner.poll_recv(cx, bufs, meta)
++    }
++
++    fn local_addr(&self) -> io::Result<SocketAddr> {
++        self.inner.local_addr()
++    }
++
++    fn max_transmit_segments(&self) -> usize {
++        1
++    }
++
++    fn max_receive_segments(&self) -> usize {
++        self.inner.max_receive_segments()
++    }
++
++    fn may_fragment(&self) -> bool {
++        self.inner.may_fragment()
++    }
++}
++
++#[derive(Debug)]
++struct EgressPoller {
++    socket: Arc<EgressSocket>,
++    inner: Pin<Box<dyn UdpPoller>>,
++    sleep: Option<Pin<Box<Sleep>>>,
++}
++
++impl UdpPoller for EgressPoller {
++    fn poll_writable(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
++        let this = self.get_mut();
++        // Register the OS wake even while rate-blocked. Every Quinn connection
++        // owns a distinct inner poller and timer, so no task overwrites another.
++        let inner = this.inner.as_mut().poll_writable(cx);
++        if let Poll::Ready(Err(error)) = inner {
++            return Poll::Ready(Err(error));
++        }
++        match this.socket.ready_deadline()? {
++            None => {
++                this.sleep = None;
++                inner
++            }
++            Some(deadline) => {
++                let timer = this
++                    .sleep
++                    .get_or_insert_with(|| Box::pin(tokio::time::sleep_until(deadline)));
++                timer.as_mut().reset(deadline);
++                if timer.as_mut().poll(cx).is_ready() {
++                    // The deadline can pass between accounting and registration.
++                    // Re-poll instead of losing that wake; the next accounting
++                    // pass decides whether another connection spent the credit.
++                    cx.waker().wake_by_ref();
++                }
++                Poll::Pending
++            }
++        }
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use futures::{future::poll_fn, task::AtomicWaker};
++    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
++
++    #[derive(Debug)]
++    struct FakeSocket {
++        writable: AtomicBool,
++        sent: AtomicU64,
++        waiters: Mutex<Vec<Arc<AtomicWaker>>>,
++    }
++
++    impl FakeSocket {
++        fn new() -> Arc<Self> {
++            Arc::new(Self {
++                writable: AtomicBool::new(true),
++                sent: AtomicU64::new(0),
++                waiters: Mutex::new(Vec::new()),
++            })
++        }
++
++        fn set_writable(&self, value: bool) {
++            self.writable.store(value, Ordering::SeqCst);
++            if value {
++                for waiter in self.waiters.lock().unwrap().iter() {
++                    waiter.wake();
++                }
++            }
++        }
++    }
++
++    impl AsyncUdpSocket for FakeSocket {
++        fn create_io_poller(self: Arc<Self>) -> Pin<Box<dyn UdpPoller>> {
++            let waker = Arc::new(AtomicWaker::new());
++            self.waiters.lock().unwrap().push(waker.clone());
++            Box::pin(FakePoller {
++                socket: self,
++                waker,
++            })
++        }
++
++        fn try_send(&self, transmit: &Transmit<'_>) -> io::Result<()> {
++            if !self.writable.load(Ordering::SeqCst) {
++                return Err(io::ErrorKind::WouldBlock.into());
++            }
++            self.sent
++                .fetch_add(transmit.contents.len() as u64, Ordering::SeqCst);
++            Ok(())
++        }
++
++        fn poll_recv(
++            &self,
++            _cx: &mut Context<'_>,
++            _bufs: &mut [IoSliceMut<'_>],
++            _meta: &mut [RecvMeta],
++        ) -> Poll<io::Result<usize>> {
++            Poll::Pending
++        }
++
++        fn local_addr(&self) -> io::Result<SocketAddr> {
++            Ok("127.0.0.1:4443".parse().unwrap())
++        }
++    }
++
++    #[derive(Debug)]
++    struct FakePoller {
++        socket: Arc<FakeSocket>,
++        waker: Arc<AtomicWaker>,
++    }
++
++    impl UdpPoller for FakePoller {
++        fn poll_writable(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
++            self.waker.register(cx.waker());
++            if self.socket.writable.load(Ordering::SeqCst) {
++                Poll::Ready(Ok(()))
++            } else {
++                Poll::Pending
++            }
++        }
++    }
++
++    fn transmit(contents: &[u8]) -> Transmit<'_> {
++        Transmit {
++            destination: "127.0.0.1:4444".parse().unwrap(),
++            ecn: None,
++            contents,
++            segment_size: None,
++            src_ip: None,
++        }
++    }
++
++    #[tokio::test(start_paused = true)]
++    async fn aggregate_envelope_and_fractional_refills() {
++        let inner = FakeSocket::new();
++        let socket = EgressSocket::wrap(inner.clone(), 100, 100).unwrap();
++        socket.try_send(&transmit(&[0; 100])).unwrap();
++        assert_eq!(
++            socket.try_send(&transmit(&[0])).unwrap_err().kind(),
++            io::ErrorKind::WouldBlock
++        );
++        for step in 1..=100 {
++            tokio::time::advance(Duration::from_millis(10)).await;
++            socket.try_send(&transmit(&[0])).unwrap();
++            assert!(inner.sent.load(Ordering::SeqCst) <= 100 + step);
++            assert!(socket.try_send(&transmit(&[0])).is_err());
++        }
++        assert_eq!(inner.sent.load(Ordering::SeqCst), 200);
++    }
++
++    #[tokio::test(start_paused = true)]
++    async fn failed_inner_send_spends_no_credit() {
++        let inner = FakeSocket::new();
++        let socket = EgressSocket::wrap(inner.clone(), 1, 100).unwrap();
++        inner.set_writable(false);
++        assert_eq!(
++            socket.try_send(&transmit(&[0; 100])).unwrap_err().kind(),
++            io::ErrorKind::WouldBlock
++        );
++        assert_eq!(inner.sent.load(Ordering::SeqCst), 0);
++        inner.set_writable(true);
++        socket.try_send(&transmit(&[0; 100])).unwrap();
++        assert_eq!(inner.sent.load(Ordering::SeqCst), 100);
++    }
++
++    #[tokio::test(start_paused = true)]
++    async fn low_rate_timer_and_inner_readiness_both_wake() {
++        let inner = FakeSocket::new();
++        let socket = EgressSocket::wrap(inner.clone(), 1, 10).unwrap();
++        socket.try_send(&transmit(&[0; 10])).unwrap();
++        assert!(socket.try_send(&transmit(&[0; 10])).is_err());
++        let mut poller = socket.clone().create_io_poller();
++        inner.set_writable(false);
++        let task =
++            tokio::spawn(async move { poll_fn(|cx| poller.as_mut().poll_writable(cx)).await });
++        tokio::task::yield_now().await;
++        tokio::time::advance(Duration::from_secs(9)).await;
++        assert!(!task.is_finished());
++        tokio::time::advance(Duration::from_secs(1)).await;
++        tokio::task::yield_now().await;
++        assert!(!task.is_finished());
++        inner.set_writable(true);
++        task.await.unwrap().unwrap();
++        socket.try_send(&transmit(&[0; 10])).unwrap();
++    }
++
++    #[tokio::test(start_paused = true)]
++    async fn invalid_or_oversized_transmit_fails_without_waiting() {
++        let inner = FakeSocket::new();
++        assert!(EgressSocket::wrap(inner.clone(), 0, 100).is_err());
++        assert!(EgressSocket::wrap(inner.clone(), 100, 0).is_err());
++        let socket = EgressSocket::wrap(inner.clone(), 1, 10).unwrap();
++        assert_eq!(socket.max_transmit_segments(), 1);
++        assert_eq!(
++            socket.try_send(&transmit(&[0; 11])).unwrap_err().kind(),
++            io::ErrorKind::InvalidInput
++        );
++        let mut segmented = transmit(&[0; 10]);
++        segmented.segment_size = Some(5);
++        assert_eq!(
++            socket.try_send(&segmented).unwrap_err().kind(),
++            io::ErrorKind::InvalidInput
++        );
++        socket.try_send(&transmit(&[0; 10])).unwrap();
++    }
++
++    #[tokio::test(start_paused = true)]
++    async fn multiple_pollers_share_one_sustained_budget() {
++        let inner = FakeSocket::new();
++        let socket = EgressSocket::wrap(inner.clone(), 100, 10).unwrap();
++        let start = Instant::now();
++        let mut tasks = Vec::new();
++        for _ in 0..4 {
++            let socket = socket.clone();
++            tasks.push(tokio::spawn(async move {
++                let mut poller = socket.clone().create_io_poller();
++                for _ in 0..5 {
++                    loop {
++                        match socket.try_send(&transmit(&[0; 10])) {
++                            Ok(()) => break,
++                            Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
++                                poll_fn(|cx| poller.as_mut().poll_writable(cx))
++                                    .await
++                                    .unwrap();
++                            }
++                            Err(error) => panic!("unexpected send error: {error}"),
++                        }
++                    }
++                }
++            }));
++        }
++        for task in tasks {
++            task.await.unwrap();
++        }
++        let elapsed = Instant::now().duration_since(start).as_nanos();
++        assert_eq!(inner.sent.load(Ordering::SeqCst), 200);
++        assert!(elapsed >= 1_900_000_000);
++        assert!(200 * NANOS_PER_SECOND <= 10 * NANOS_PER_SECOND + 100 * elapsed);
++    }
++}
+diff --git a/moq-relay-ietf/src/lib.rs b/moq-relay-ietf/src/lib.rs
+index d98f9eb..b35202e 100644
+--- a/moq-relay-ietf/src/lib.rs
++++ b/moq-relay-ietf/src/lib.rs
+@@ -89,6 +89,7 @@ mod auth;
+ mod consumer;
+ mod coordinator;
+ mod covering_prefix_set;
++pub mod egress;
+ mod interest;
+ mod local;
+ pub mod metrics;
+diff --git a/moq-relay-ietf/src/producer.rs b/moq-relay-ietf/src/producer.rs
+index 57d7754..2a89aab 100644
+--- a/moq-relay-ietf/src/producer.rs
++++ b/moq-relay-ietf/src/producer.rs
+@@ -36,6 +36,7 @@ pub struct Producer {
+     /// Token authorization state. Internal relay peers and sessions in scopes
+     /// without a policy carry `None`, permitting every request.
+     auth: Option<SessionAuth>,
++    subgroup_timeout: Option<Duration>,
+ }
+ 
+ /// Why the wait for upstream readiness ended without the subscription being
+@@ -83,9 +84,37 @@ impl Producer {
+             upstream_namespaces,
+             context,
+             auth,
++            subgroup_timeout: None,
+         }
+     }
+ 
++    /// Select a local forwarding-lifetime policy for downstream subscriptions.
++    pub(crate) fn with_subgroup_timeout(mut self, timeout: Option<Duration>) -> Self {
++        self.subgroup_timeout = timeout;
++        self
++    }
++
++    async fn serve_track(
++        &self,
++        subscribed: Subscribed,
++        track: TrackReader,
++    ) -> Result<(), SessionError> {
++        let subscription_id = subscribed.id;
++        let result = subscribed
++            .with_subgroup_timeout(self.subgroup_timeout)
++            .serve(track)
++            .await;
++        if matches!(&result, Err(SessionError::Serve(ServeError::Closed(code)))
++            if *code == moq_transport::message::PublishDoneCode::TooFarBehind as u64)
++        {
++            // Count terminal subscription outcomes, not individual expired groups.
++            metrics::counter!("moq_relay_too_far_behind_total").increment(1);
++            tracing::info!(session_id = %self.publisher.session_id(), subscription_id,
++                "subscription terminated: too far behind");
++        }
++        result
++    }
++
+     /// Send PUBLISH_NAMESPACE for a set of tracks to the remote peer.
+     pub async fn publish_namespace(&mut self, tracks: TracksReader) -> Result<(), SessionError> {
+         self.publisher.publish_namespace(tracks).await
+@@ -340,7 +369,7 @@ impl Producer {
+                 }
+             }
+ 
+-            return Ok(subscribed.serve(local.reader).await?);
++            return Ok(self.serve_track(subscribed, local.reader).await?);
+         }
+ 
+         // Check remote tracks after local exact tracks and namespace route sources.
+@@ -360,7 +389,7 @@ impl Producer {
+                     // Held until serving finishes; the cross-relay subscription is
+                     // released once the last guard for this track drops.
+                     let _interest_guard = interest_guard;
+-                    return Ok(subscribed.serve(track).await?);
++                    return Ok(self.serve_track(subscribed, track).await?);
+                 }
+             }
+             Err(e) => {
+diff --git a/moq-relay-ietf/src/relay.rs b/moq-relay-ietf/src/relay.rs
+index 1967967..cb29ab0 100644
+--- a/moq-relay-ietf/src/relay.rs
++++ b/moq-relay-ietf/src/relay.rs
+@@ -246,6 +246,7 @@ pub struct Relay {
+     /// Per-scope authorization policy, resolved from the coordinator and
+     /// cached. Shared by every connection task.
+     authorizer: Arc<ScopeAuthorizer>,
++    subgroup_timeout: Option<Duration>,
+ }
+ 
+ impl Relay {
+@@ -320,9 +321,17 @@ impl Relay {
+             upstream_namespaces,
+             upstream_namespaces_runner,
+             authorizer,
++            subgroup_timeout: None,
+         })
+     }
+ 
++    /// Bound subgroup forwarding lifetime for public downstream subscribers.
++    /// Internal relay peers retain their existing behavior.
++    pub fn with_subgroup_timeout(mut self, timeout: Option<Duration>) -> Self {
++        self.subgroup_timeout = timeout;
++        self
++    }
++
+     /// Run the relay server.
+     pub async fn run(self) -> anyhow::Result<()> {
+         let Self {
+@@ -332,6 +341,7 @@ impl Relay {
+             upstream_namespaces,
+             upstream_namespaces_runner,
+             authorizer,
++            subgroup_timeout,
+         } = self;
+ 
+         let RelayConfig {
+@@ -718,7 +728,7 @@ impl Relay {
+                             // to the Session's reject fields so unauthorized messages get
+                             // an explicit error response instead of being silently ignored.
+                             let (producer, reject_subscribes) = if can_subscribe {
+-                                (publisher.map(|publisher| Producer::new_with_upstream_namespaces(publisher, locals.clone(), remotes.clone(), upstream_namespaces, context.clone(), session_auth.clone())), None)
++                                (publisher.map(|publisher| Producer::new_with_upstream_namespaces(publisher, locals.clone(), remotes.clone(), upstream_namespaces, context.clone(), session_auth.clone()).with_subgroup_timeout(if context.interface == SessionInterface::Internal { None } else { subgroup_timeout })), None)
+                             } else {
+                                 (None, publisher)
+                             };
+diff --git a/moq-transport/src/session/subgroup_lifecycle.rs b/moq-transport/src/session/subgroup_lifecycle.rs
+index df937a4..6e46811 100644
+--- a/moq-transport/src/session/subgroup_lifecycle.rs
++++ b/moq-transport/src/session/subgroup_lifecycle.rs
+@@ -39,6 +39,19 @@ async fn pair_with_ack_control(
+     web_transport::Session,
+     quinn::Connection,
+     Proxy,
++) {
++    pair_with_limits(raw, controlled, None).await
++}
++
++async fn pair_with_limits(
++    raw: bool,
++    controlled: bool,
++    stream_limit: Option<u32>,
++) -> (
++    web_transport::Session,
++    web_transport::Session,
++    quinn::Connection,
++    Proxy,
+ ) {
+     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+     let cert = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
+@@ -60,7 +73,9 @@ async fn pair_with_ack_control(
+     ));
+     let mut transport = quinn::TransportConfig::default();
+     transport.stream_receive_window((2 * PAYLOAD as u32).into());
+-    if controlled {
++    if let Some(limit) = stream_limit {
++        transport.max_concurrent_uni_streams(limit.into());
++    } else if controlled {
+         transport.max_concurrent_uni_streams(4096u32.into());
+     }
+     config.transport_config(Arc::new(transport));
+@@ -459,3 +474,137 @@ async fn pending_ack_budget_overflow_resets_raw() {
+ async fn pending_ack_budget_overflow_resets_webtransport() {
+     finished_subgroups_release_active_slots(false, true).await;
+ }
++
++// Exercise the public Subscribed builder, PUBLISH_DONE path, and real QUIC
++// resource cleanup, rather than checking only the generic timer helper.
++async fn subgroup_lifetime_terminates_subscription(block_open: bool) {
++    let (sender, receiver, observer, proxy) =
++        pair_with_limits(true, true, if block_open { Some(0) } else { None }).await;
++    proxy.1.store(true, Ordering::SeqCst);
++    let (outgoing, mut messages) = crate::watch::Queue::default().split();
++    let publisher = Publisher::new(
++        outgoing,
++        sender,
++        None,
++        crate::session::RequestId::new(0, u64::MAX, u64::MAX, 1),
++        crate::session::PendingRequests::default(),
++        crate::session::SessionId::generate(),
++        tokio_util::sync::CancellationToken::new(),
++    );
++    let namespace = crate::coding::TrackNamespace::from_utf8_path("timeout-test");
++    let (writer, reader) = serve::Track::new(namespace.clone(), "track").produce();
++    let mut writer = writer.subgroups().unwrap();
++    let mut group = writer.append(128).unwrap();
++    group.write(bytes::Bytes::from_static(b"deadline")).unwrap();
++    drop(group);
++    let (subscribed, _recv, _joining) = Subscribed::new(
++        publisher.clone(),
++        message::Subscribe {
++            id: 0,
++            track_namespace: namespace,
++            track_name: "track".into(),
++            params: Default::default(),
++        },
++        None,
++    )
++    .unwrap();
++    let serve = subscribed
++        .with_subgroup_timeout(Some(Duration::from_millis(300)))
++        .serve(reader);
++    let control = async {
++        assert!(matches!(
++            messages.pop().await,
++            Some(message::Message::SubscribeOk(_))
++        ));
++        let Some(message::Message::PublishDone(done)) = messages.pop().await else {
++            panic!("expected terminal PUBLISH_DONE");
++        };
++        assert_eq!(
++            done.status_code,
++            message::PublishDoneCode::TooFarBehind as u64
++        );
++        assert_eq!(done.stream_count, if block_open { 0 } else { 1 });
++    };
++    let receive = async {
++        if block_open {
++            return;
++        }
++        let mut stream = receiver.accept_uni().await.unwrap();
++        let mut bytes = 0;
++        while let Some(chunk) = stream.read(65536).await.unwrap() {
++            bytes += chunk.len();
++        }
++        assert!(
++            bytes > 8,
++            "all data and FIN arrive while their ACK is suppressed"
++        );
++        // The sender's FIN-ACK guard must reset even though writes completed.
++        while observer.stats().frame_rx.reset_stream == 0 {
++            tokio::time::sleep(Duration::from_millis(1)).await;
++        }
++    };
++    tokio::time::timeout(Duration::from_secs(3), async {
++        let (result, (), ()) = tokio::join!(serve, control, receive);
++        assert!(
++            matches!(result, Err(SessionError::Serve(ServeError::Closed(code)))
++            if code == message::PublishDoneCode::TooFarBehind as u64)
++        );
++    })
++    .await
++    .expect("resource timeout must terminate and clean up promptly");
++    if block_open {
++        assert_eq!(observer.stats().frame_rx.reset_stream, 0);
++    }
++}
++
++#[tokio::test]
++async fn subgroup_lifetime_covers_waiting_for_stream_credit() {
++    subgroup_lifetime_terminates_subscription(true).await;
++}
++
++#[tokio::test]
++async fn subgroup_lifetime_covers_fin_ack_and_resets_stream() {
++    subgroup_lifetime_terminates_subscription(false).await;
++}
++
++#[tokio::test]
++async fn subgroup_lifetime_none_preserves_existing_source_failure_handling() {
++    let (sender, _receiver, _observer, _proxy) = pair(true).await;
++    let (mut forwarder, _cancel) = forwarder(sender);
++    assert!(forwarder.subgroup_timeout.is_none());
++    let (writer, reader) = serve::Track::new(
++        crate::coding::TrackNamespace::from_utf8_path("source-failure"),
++        "track",
++    )
++    .produce();
++    let mut writer = writer.subgroups().unwrap();
++    let mut subgroup = writer.append(128).unwrap();
++    subgroup
++        .write(bytes::Bytes::from_static(b"source"))
++        .unwrap();
++    subgroup
++        .close(ServeError::Closed(
++            message::PublishDoneCode::TooFarBehind as u64,
++        ))
++        .unwrap();
++    let TrackReaderMode::Subgroups(reader) = reader.mode().await.unwrap() else {
++        panic!("expected subgroups");
++    };
++    drop(writer);
++    // This pinned implementation ignores individual subgroup-source failures.
++    // Merely adding a disabled lifetime hook must not change that baseline.
++    tokio::time::timeout(
++        Duration::from_secs(2),
++        forwarder.serve_subgroups(
++            reader,
++            DeliveryFilter {
++                forward: true,
++                start_location: None,
++                end_group_id: None,
++            },
++        ),
++    )
++    .await
++    .unwrap()
++    .unwrap();
++}
+diff --git a/moq-transport/src/session/subscribed.rs b/moq-transport/src/session/subscribed.rs
+index 68518b9..f8d1061 100644
+--- a/moq-transport/src/session/subscribed.rs
++++ b/moq-transport/src/session/subscribed.rs
+@@ -2,8 +2,10 @@
+ // SPDX-FileCopyrightText: 2023-2024 Luke Curley and contributors
+ // SPDX-License-Identifier: MIT OR Apache-2.0
+ 
+-use std::ops;
++use std::{future::Future, ops, time::Duration};
++
+ use std::sync::{Arc, Mutex};
++use tokio::time::{timeout_at, Instant};
+ 
+ use futures::stream::FuturesUnordered;
+ use futures::StreamExt;
+@@ -88,6 +90,7 @@ pub(super) struct ObjectForwarder {
+     state: State<ObjectForwarderState>,
+     track_alias: u64,
+     mlog: Option<Arc<Mutex<mlog::MlogWriter>>>,
++    subgroup_timeout: Option<Duration>,
+ }
+ 
+ impl ObjectForwarder {
+@@ -102,6 +105,7 @@ impl ObjectForwarder {
+             state: send,
+             track_alias,
+             mlog,
++            subgroup_timeout: None,
+         };
+         let recv = ObjectForwarderRecv { state: recv };
+         (send, recv)
+@@ -379,6 +383,17 @@ impl SubgroupOutput {
+ }
+ 
+ impl Subscribed {
++    /// Bound each subgroup's forwarding lifetime, from observation by this
++    /// forwarder through FIN acknowledgement, including stream-open waits.
++    ///
++    /// The embedder selects the resource policy. This is local elapsed time,
++    /// not an original-publisher timestamp or the negotiated DELIVERY_TIMEOUT.
++    /// Expiry ends this subscription with draft-16 §9.15 TOO_FAR_BEHIND.
++    pub fn with_subgroup_timeout(mut self, timeout: Option<Duration>) -> Self {
++        self.forwarder.subgroup_timeout = timeout;
++        self
++    }
++
+     pub(super) fn new(
+         publisher: Publisher,
+         msg: message::Subscribe,
+@@ -533,6 +548,25 @@ impl Subscribed {
+     }
+ }
+ 
++/// Preserve one absolute deadline across stream opening, writing, and FIN ACK.
++/// Dropping a timed-out write/ACK future drops its existing stream reset guard.
++async fn with_subgroup_deadline<T>(
++    deadline: Option<Instant>,
++    future: impl Future<Output = Result<T, SessionError>>,
++) -> Result<T, SessionError> {
++    match deadline {
++        Some(deadline) => timeout_at(deadline, future).await.unwrap_or_else(|_| {
++            Err(ServeError::Closed(message::PublishDoneCode::TooFarBehind as u64).into())
++        }),
++        None => future.await,
++    }
++}
++
++fn is_too_far_behind(error: &SessionError) -> bool {
++    matches!(error, SessionError::Serve(ServeError::Closed(code))
++        if *code == message::PublishDoneCode::TooFarBehind as u64)
++}
++
+ impl ObjectForwarder {
+     async fn serve_subgroups(
+         &mut self,
+@@ -553,6 +587,9 @@ impl ObjectForwarder {
+                 // Reap ready waiters before checking the ACK budget on handoff.
+                 res = acknowledgements.next(), if !acknowledgements.is_empty() => {
+                     if let Some(Err(err)) = res {
++                        if self.subgroup_timeout.is_some() && is_too_far_behind(&err) {
++                            return Err(err);
++                        }
+                         tracing::debug!(error = %err, "subgroup stream closed before FIN acknowledgement");
+                     }
+                 },
+@@ -571,24 +608,39 @@ impl ObjectForwarder {
+                         let info = subgroup.info.clone();
+                         let mlog = self.mlog.clone();
+                         let session_id = self.publisher.session_id().clone();
++                        let observed = Instant::now();
++                        // An unrepresentable configured lifetime fails closed.
++                        let deadline = self.subgroup_timeout.map(|duration|
++                            observed.checked_add(duration).unwrap_or(observed));
+ 
+                         tasks.push(async move {
+-                            let res = Self::serve_subgroup(header, subgroup, publisher, state, mlog, delivery_filter).await;
++                            let res = with_subgroup_deadline(deadline,
++                                Self::serve_subgroup(header, subgroup, publisher, state, mlog, delivery_filter)).await;
+                             if let Err(err) = &res {
+-                                if Subscribed::is_expected_serve_shutdown(err) {
++                                if deadline.is_some() && is_too_far_behind(err) {
++                                    tracing::info!(session_id = %session_id, subgroup_info = ?info,
++                                        elapsed_ms = observed.elapsed().as_millis() as u64,
++                                        stage = "forward", "subgroup forwarding lifetime expired");
++                                } else if Subscribed::is_expected_serve_shutdown(err) {
+                                     tracing::debug!(session_id = %session_id, subgroup_info = ?info, error = %err, "stopped serving subgroup");
+                                 } else {
+                                     tracing::warn!(session_id = %session_id, subgroup_info = ?info, error = %err, "failed to serve subgroup");
+                                 }
+                             }
+-                            res
++                            (res, deadline, observed, session_id, info)
+                         });
+                     },
+                     Ok(None) => done = Some(Ok(())),
+                     Err(err) => done = Some(Err(err)),
+                 },
+                 res = tasks.next(), if !tasks.is_empty() => {
+-                    if let Some(Ok(Some(mut output))) = res {
++                    if let Some((result, deadline, observed, session_id, info)) = res {
++                        let mut output = match result {
++                            Ok(Some(output)) => output,
++                            Err(error) if deadline.is_some() && is_too_far_behind(&error) => return Err(error),
++                            // Preserve the pre-existing handling of other subgroup failures.
++                            _ => continue,
++                        };
+                         if acknowledgements.len() == MAX_PENDING_SUBGROUP_ACKS {
+                             // Do not silently forget a FIN handle: it would no
+                             // longer respond to STOP or subscription cancellation.
+@@ -597,7 +649,17 @@ impl ObjectForwarder {
+                             // continued delivery for a hard resource bound.
+                             return Err(ServeError::Closed(message::PublishDoneCode::TooFarBehind as u64).into());
+                         }
+-                        acknowledgements.push(async move { output.acknowledged().await });
++                        acknowledgements.push(async move {
++                            let result = with_subgroup_deadline(deadline, output.acknowledged()).await;
++                            if let Err(error) = &result {
++                                if is_too_far_behind(error) {
++                                    tracing::info!(session_id = %session_id, subgroup_info = ?info,
++                                        elapsed_ms = observed.elapsed().as_millis() as u64,
++                                        stage = "fin_ack", "subgroup forwarding lifetime expired");
++                                }
++                            }
++                            result
++                        });
+                     }
+                 },
+                 else => return Ok(done.unwrap()?),
+@@ -1036,6 +1098,64 @@ impl ObjectForwarderRecv {
+ mod tests {
+     use super::*;
+ 
++    #[tokio::test]
++    async fn subgroup_timeout_none_preserves_completion_and_error() {
++        let result = with_subgroup_deadline(None, async {
++            tokio::time::sleep(Duration::from_millis(5)).await;
++            Ok::<_, SessionError>(17)
++        })
++        .await;
++        assert_eq!(result.unwrap(), 17);
++        let error = with_subgroup_deadline(None, async {
++            Err::<(), _>(SessionError::Serve(ServeError::Cancel))
++        })
++        .await
++        .unwrap_err();
++        assert!(matches!(error, SessionError::Serve(ServeError::Cancel)));
++    }
++
++    #[tokio::test]
++    async fn subgroup_timeout_drops_blocked_forwarding_future() {
++        use std::sync::atomic::{AtomicBool, Ordering};
++        struct Guard(Arc<AtomicBool>);
++        impl Drop for Guard {
++            fn drop(&mut self) {
++                self.0.store(true, Ordering::SeqCst);
++            }
++        }
++        let dropped = Arc::new(AtomicBool::new(false));
++        let guard = Guard(dropped.clone());
++        let error = with_subgroup_deadline(
++            Some(Instant::now() + Duration::from_millis(5)),
++            async move {
++                let _guard = guard;
++                std::future::pending::<Result<(), SessionError>>().await
++            },
++        )
++        .await
++        .unwrap_err();
++        assert!(is_too_far_behind(&error));
++        assert!(dropped.load(Ordering::SeqCst));
++    }
++
++    #[tokio::test]
++    async fn subgroup_timeout_ack_phase_keeps_original_deadline() {
++        let deadline = Instant::now() + Duration::from_millis(5);
++        with_subgroup_deadline(Some(deadline), async { Ok::<_, SessionError>(()) })
++            .await
++            .unwrap();
++        // Simulate a delayed handoff: a fresh ACK-stage budget would incorrectly
++        // allow this future to complete after the original lifetime expired.
++        tokio::time::sleep_until(deadline + Duration::from_millis(1)).await;
++        let error = with_subgroup_deadline(Some(deadline), async {
++            tokio::time::sleep(Duration::from_millis(20)).await;
++            Ok::<_, SessionError>(())
++        })
++        .await
++        .unwrap_err();
++        assert!(is_too_far_behind(&error));
++    }
++
+     #[test]
+     fn subscribed_state_counts_opened_streams() {
+         let mut state = ObjectForwarderState::default();
