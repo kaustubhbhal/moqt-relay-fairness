@@ -1,0 +1,162 @@
+[
+  {
+    "clients": 16,
+    "stall_clients": 0,
+    "repetitions": 5,
+    "relay_rss_peak_mib": {
+      "median": 25.53125,
+      "min": 24.078125,
+      "max": 27.453125
+    },
+    "latency_p99_ms": {
+      "median": 12.607,
+      "min": 7.368,
+      "max": 20.381
+    },
+    "mean_client_goodput_mbps": {
+      "median": 3.99984,
+      "min": 3.998728933333333,
+      "max": 3.99984
+    },
+    "mean_client_timely_goodput_mbps": {
+      "median": 3.99984,
+      "min": 3.998728933333333,
+      "max": 3.99984
+    },
+    "publisher_actual_objects_per_second": {
+      "median": 30.0,
+      "min": 30.0,
+      "max": 30.0
+    },
+    "relay_cpu_percent_one_core": {
+      "median": 31.025643706228976,
+      "min": 22.025839924378406,
+      "max": 36.20470409881831
+    },
+    "subscribers_cpu_percent_one_core": {
+      "median": 30.619010670931175,
+      "min": 22.231110120030948,
+      "max": 35.679841169447386
+    }
+  },
+  {
+    "clients": 16,
+    "stall_clients": 8,
+    "repetitions": 5,
+    "relay_rss_peak_mib": {
+      "median": 26.28125,
+      "min": 24.0,
+      "max": 31.359375
+    },
+    "latency_p99_ms": {
+      "median": 8.954,
+      "min": 6.725,
+      "max": 34.13
+    },
+    "mean_client_goodput_mbps": {
+      "median": 3.99984,
+      "min": 3.99984,
+      "max": 3.99984
+    },
+    "mean_client_timely_goodput_mbps": {
+      "median": 3.99984,
+      "min": 3.99984,
+      "max": 3.99984
+    },
+    "publisher_actual_objects_per_second": {
+      "median": 30.0,
+      "min": 30.0,
+      "max": 30.0
+    },
+    "relay_cpu_percent_one_core": {
+      "median": 14.74934073165702,
+      "min": 11.056400884894268,
+      "max": 20.103711983454712
+    },
+    "subscribers_cpu_percent_one_core": {
+      "median": 14.48257630481893,
+      "min": 10.302719133206992,
+      "max": 19.973045250672286
+    }
+  },
+  {
+    "clients": 64,
+    "stall_clients": 0,
+    "repetitions": 5,
+    "relay_rss_peak_mib": {
+      "median": 52.421875,
+      "min": 51.75,
+      "max": 53.15625
+    },
+    "latency_p99_ms": {
+      "median": 11.969,
+      "min": 10.155,
+      "max": 69.282
+    },
+    "mean_client_goodput_mbps": {
+      "median": 3.9973401,
+      "min": 3.9906737000000003,
+      "max": 3.99984
+    },
+    "mean_client_timely_goodput_mbps": {
+      "median": 3.9965068,
+      "min": 3.9898404000000003,
+      "max": 3.999562233333333
+    },
+    "publisher_actual_objects_per_second": {
+      "median": 30.0,
+      "min": 29.933333333333334,
+      "max": 30.0
+    },
+    "relay_cpu_percent_one_core": {
+      "median": 77.7039856388782,
+      "min": 62.30270383487489,
+      "max": 89.12823847386251
+    },
+    "subscribers_cpu_percent_one_core": {
+      "median": 78.26261383286902,
+      "min": 65.28812654150148,
+      "max": 90.09151660059045
+    }
+  },
+  {
+    "clients": 64,
+    "stall_clients": 32,
+    "repetitions": 5,
+    "relay_rss_peak_mib": {
+      "median": 47.859375,
+      "min": 46.28125,
+      "max": 48.875
+    },
+    "latency_p99_ms": {
+      "median": 11.363,
+      "min": 9.034,
+      "max": 14.486
+    },
+    "mean_client_goodput_mbps": {
+      "median": 3.99984,
+      "min": 3.9970623333333335,
+      "max": 4.0001177666666665
+    },
+    "mean_client_timely_goodput_mbps": {
+      "median": 3.99984,
+      "min": 3.9970623333333335,
+      "max": 4.0001177666666665
+    },
+    "publisher_actual_objects_per_second": {
+      "median": 30.0,
+      "min": 30.0,
+      "max": 30.0
+    },
+    "relay_cpu_percent_one_core": {
+      "median": 54.469857810521425,
+      "min": 48.5303285706868,
+      "max": 57.260767720160146
+    },
+    "subscribers_cpu_percent_one_core": {
+      "median": 54.80563369235221,
+      "min": 49.334151814282095,
+      "max": 57.670567699513555
+    }
+  }
+]

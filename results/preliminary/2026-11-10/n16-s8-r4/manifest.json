@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "status": "complete",
+  "created_utc": "20261110T070107.174755Z",
+  "config": {
+    "clients": 16,
+    "stall_clients": 8,
+    "duration": 30.0,
+    "stall_after": 5.0,
+    "stall_for": 15.0,
+    "bitrate": 4000000,
+    "fps": 30,
+    "group_frames": 30,
+    "receive_window": 65536,
+    "stream_receive_window": 32768,
+    "max_uni_streams": 1,
+    "label": "n16-s8-r4",
+    "out": "/Users/kaustubhbhal/cs4251/moqt-relay-fairness/results/local-matrix-20261110T065310Z/n16-s8-r4"
+  },
+  "commands": {
+    "relay": [
+      "/Users/kaustubhbhal/cs4251/moqt-relay-fairness/vendor/moq-rs/target/release/moq-relay-ietf",
+      "--bind",
+      "127.0.0.1:49914",
+      "--tls-cert",
+      "/Users/kaustubhbhal/cs4251/moqt-relay-fairness/.local/certs/20261110T070107.174755Z/cert.pem",
+      "--tls-key",
+      "/Users/kaustubhbhal/cs4251/moqt-relay-fairness/.local/certs/20261110T070107.174755Z/key.pem",
+      "--metrics-addr",
+      "127.0.0.1:58680",
+      "--coordinator-file",
+      "/Users/kaustubhbhal/cs4251/moqt-relay-fairness/results/local-matrix-20261110T065310Z/n16-s8-r4/coordinator.json"
+    ],
+    "publisher": [
+      "/Users/kaustubhbhal/cs4251/moqt-relay-fairness/target/release/moqt-load",
+      "publish",
+      "--relay",
+      "moqt://127.0.0.1:49914",
+      "--tls-root",
+      "/Users/kaustubhbhal/cs4251/moqt-relay-fairness/.local/certs/20261110T070107.174755Z/cert.pem",
+      "--namespace",
+      "local-20261110T070107.174755Z",
+      "--duration",
+      "50.0",
+      "--bitrate",
+      "4000000",
+      "--fps",
+      "30",
+      "--group-frames",
+      "30"
+    ],
+    "subscribers": [
+      "/Users/kaustubhbhal/cs4251/moqt-relay-fairness/target/release/moqt-load",
+      "subscribe",
+      "--relay",
+      "moqt://127.0.0.1:49914",
+      "--tls-root",
+      "/Users/kaustubhbhal/cs4251/moqt-relay-fairness/.local/certs/20261110T070107.174755Z/cert.pem",
+      "--namespace",
+      "local-20261110T070107.174755Z",
+      "--duration",
+      "30.0",
+      "--clients",
+      "16",
+      "--client-offset",
+      "0",
+      "--stall-clients",
+      "8",
+      "--stall-after",
+      "5.0",
+      "--stall-for",
+      "15.0",
+      "--receive-window",
+      "65536",
+      "--stream-receive-window",
+      "32768",
+      "--max-uni-streams",
+      "1"
+    ]
+  },
+  "git_commit": "d7da0046059a154fdb87101ab6af5c66dc82202e",
+  "git_status": "",
+  "upstream_commit": "3b2b584b47e4a18f3a6bf48dc9a665c736743443",
+  "upstream_status": "",
+  "host": {
+    "platform": "macOS-15.3.1-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "logical_cpus": 10,
+    "cpu_model": "Apple M2 Pro",
+    "memory_bytes": 17179869184
+  },
+  "binary_sha256": {
+    "relay": "428d81c6b82a3053de3d1e14c8174124142a9661a98d75e6cc8f0b674109d4e7",
+    "load": "81adf70163c4764a686f7afc9d9f06393bc1f237e5d8f1019a78d8651fe0c594"
+  },
+  "clock": "publisher and subscribers share one host wall clock",
+  "sampling_interval_seconds": 0.25,
+  "environment": {
+    "RUST_LOG": "warn",
+    "TOKIO_WORKER_THREADS": "4"
+  },
+  "observed_exit_codes": {
+    "relay": null,
+    "publisher": null,
+    "subscribers": 0
+  },
+  "intentional_cleanup": [
+    "relay",
+    "publisher"
+  ],
+  "final_exit_codes": {
+    "relay": -15,
+    "publisher": -15,
+    "subscribers": 0
+  },
+  "finished_unix_us": 1794294098687621
+}
