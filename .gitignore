@@ -1,0 +1,7 @@
+/target/
+/.local/
+/results/local-*/
+/results/ice-*/
+__pycache__/
+*.pyc
+.DS_Store
