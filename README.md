@@ -2,11 +2,13 @@
 
 CS 4251 Group 16's experiment setup for studying how stalled subscribers affect a Media over QUIC relay.
 
-The first milestone measures the existing relay. It does not yet implement the cross-session scheduler proposed in Progress Report 1. We use actual QUIC connections and synthetic, paced media objects; these are transport experiments, not video playback tests.
+The first milestone measures the existing relay. The second adds a shared UDP egress cap and an optional fixed subscription timeout. Neither implements the cross-session scheduler proposed in Progress Report 1 yet. We use actual QUIC connections and synthetic, paced media objects; these are transport experiments, not video playback tests.
 
 Cloudflare's relay is pinned to draft-16 revision `3b2b584b47e4a18f3a6bf48dc9a665c736743443` under `vendor/moq-rs`. Keeping the version fixed makes repeated experiments comparable with our submitted report. Initialize it with `git submodule update --init --recursive` after cloning.
 
 See [the experiment design](docs/experiment-design.md), [measurement notes](docs/measurement-notes.md), and [PACE ICE procedure](docs/pace-ice.md).
+
+For the patched relay, see [the capped-relay comparison](docs/capped-relay-experiments.md). It includes a separate reproducible build, identical-cap comparisons, and termination accounting that retains disconnected clients in throughput denominators.
 
 **Completed:** 20 baseline runs with 16 or 64 subscribers. Healthy clients stayed close to the source rate; paused clients received substantial late backlog after resuming. Read the [results and raw data](results/preliminary/2026-11-10/README.md), [Progress Report 2 draft](docs/progress-report-2.md), or [formatted PDF](output/pdf/progress-report-2-group-16.pdf).
 
@@ -54,7 +56,7 @@ Replace `local-RUN-DIRECTORY` with the directory printed by the runner. Multiple
 
 `moqt-load subscribe` creates independent QUIC sessions. Paused clients stop polling MoQT's session-processing future, while Quinn keeps handling transport packets and acknowledgements. Both cohorts advertise a 64 KiB connection receive window, 32 KiB stream receive window, and **one incoming unidirectional stream at a time**. That last setting avoids a receiver-cache recovery failure observed with overlapping incoming groups in the pinned library. It also constrains the workload; these results do not describe every possible client configuration.
 
-Direct `PUBLISH` tests downstream shared-track fan-out. It does not test upstream `SUBSCRIBE` deduplication. The relay has no added bandwidth cap or fairness policy in this milestone.
+Direct `PUBLISH` tests downstream shared-track fan-out. It does not test upstream `SUBSCRIBE` deduplication. The original baseline uses the unmodified relay. Capped experiments select the separate patched executable explicitly.
 
 ## Checks
 
@@ -80,4 +82,4 @@ To regenerate the report PDF and figures, install the optional `requirements-rep
 - `vendor/moq-rs`: unchanged, pinned upstream source.
 - `results/`: raw experiments and selected evidence; generated local/ICE runs are ignored by default.
 
-The next implementation milestone is a controlled shared egress budget, followed by session scheduling and backlog limits. Neither DRR nor the adaptive policy is implemented here yet.
+The shared egress cap and fixed forwarding timeout are implemented as an isolated patch. Session scheduling and adaptive backlog limits remain next steps. Neither DRR nor the adaptive policy is implemented here yet.

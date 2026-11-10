@@ -37,6 +37,18 @@ def metric_value(text, name):
     return None
 
 
+def validate_observation_duration(records, expected_seconds, tolerance_seconds=0.5):
+    """Reject suspension/clock jumps that invalidate wall-clock phase bins."""
+    ready = {e["client"]: e["timestamp_unix_us"] for e in records if e.get("type") == "ready"}
+    complete = {e["client"]: e["timestamp_unix_us"] for e in records if e.get("type") == "complete"}
+    if not ready or set(ready) != set(complete):
+        raise ValueError("missing ready/completion timestamps")
+    for client, start in ready.items():
+        elapsed = (complete[client] - start) / 1e6
+        if abs(elapsed - expected_seconds) > tolerance_seconds:
+            raise ValueError(f"client {client}: wall-clock observation {elapsed:.3f}s differs from planned {expected_seconds}s; possible host suspension or clock jump")
+
+
 def egress_measurements(snapshots):
     points = []
     for event in snapshots:
@@ -93,6 +105,7 @@ def summarize_run(path, deadline_ms=150):
     if config["stall_clients"] > config["clients"] // 2:
         raise ValueError("fixed upper-half healthy comparison requires at most half the clients stalled")
     records = read_events(path / "subscribers.jsonl")
+    validate_observation_duration(records, config["duration"])
     expected = set(range(config["clients"]))
     ready_records = [e for e in records if e.get("type") == "ready"]
     ready = {e["client"]: e["timestamp_unix_us"] for e in ready_records}

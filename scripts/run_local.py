@@ -14,6 +14,7 @@ import time
 import urllib.request
 
 from make_cert import make_cert
+from analyze import validate_observation_duration
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -247,6 +248,7 @@ def main():
             raise RuntimeError("subscriber failure; inspect subscribers.jsonl and subscribers.stderr")
         if {e.get("client") for e in records if e.get("type") == "complete"} != set(range(args.clients)):
             raise RuntimeError("missing subscriber completion records")
+        validate_observation_duration(records, args.duration)
         manifest["status"] = "complete"
     except BaseException as exc:
         manifest["status"] = "failed"

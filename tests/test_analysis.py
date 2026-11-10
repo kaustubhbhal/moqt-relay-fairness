@@ -47,6 +47,14 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual(analysis.egress_measurements(samples), 80)
         self.assertIsNone(analysis.egress_measurements(samples[:1]))
 
+    def test_suspend_invalidates_wall_clock_phases(self):
+        events = [{"type": "ready", "client": 0, "timestamp_unix_us": 0},
+                  {"type": "complete", "client": 0, "timestamp_unix_us": 30_010_000}]
+        analysis.validate_observation_duration(events, 30)
+        events[1]["timestamp_unix_us"] = 218_000_000
+        with self.assertRaisesRegex(ValueError, "host suspension"):
+            analysis.validate_observation_duration(events, 30)
+
     def test_duplicate_and_negative_time_rejected(self):
         event = self.event(0, 0, .5)
         with self.assertRaises(ValueError):
