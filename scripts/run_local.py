@@ -90,6 +90,7 @@ def main():
     p.add_argument("--group-frames", type=int, default=30)
     p.add_argument("--receive-window", type=int, default=65_536)
     p.add_argument("--stream-receive-window", type=int, default=32_768)
+    p.add_argument("--max-uni-streams", type=int, default=1)
     p.add_argument("--label", default="baseline")
     p.add_argument("--out", type=Path)
     args = p.parse_args()
@@ -98,7 +99,7 @@ def main():
     if not 0 < args.stall_after < args.stall_after + args.stall_for < args.duration:
         p.error("require 0 < stall-after < stall-after + stall-for < duration")
     if min(args.bitrate, args.fps, args.group_frames, args.receive_window,
-           args.stream_receive_window) <= 0:
+           args.stream_receive_window, args.max_uni_streams) <= 0:
         p.error("workload and window values must be positive")
     relay = ROOT / "vendor/moq-rs/target/release/moq-relay-ietf"
     load = ROOT / "target/release/moqt-load"
@@ -130,7 +131,8 @@ def main():
                         "--stall-clients", str(args.stall_clients),
                         "--stall-after", str(args.stall_after), "--stall-for", str(args.stall_for),
                         "--receive-window", str(args.receive_window),
-                        "--stream-receive-window", str(args.stream_receive_window)],
+                        "--stream-receive-window", str(args.stream_receive_window),
+                        "--max-uni-streams", str(args.max_uni_streams)],
     }
     manifest = {"schema_version": 1, "status": "running", "created_utc": tag,
                 "config": {**vars(args), "out": str(out)}, "commands": commands,

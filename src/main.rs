@@ -71,6 +71,9 @@ struct SubscribeArgs {
     receive_window: u64,
     #[arg(long, default_value_t = 32768)]
     stream_receive_window: u64,
+    /// Bound concurrent receive subgroups to avoid the pinned latest-reader cache race.
+    #[arg(long, default_value_t = 1)]
+    max_uni_streams: u32,
 }
 fn unix_us() -> Result<u64> {
     Ok(SystemTime::now()
@@ -128,7 +131,7 @@ struct Connected {
     publisher: Publisher,
     subscriber: Subscriber,
 }
-async fn connect(common: &Common, windows: Option<(u64, u64)>) -> Result<Connected> {
+async fn connect(common: &Common, windows: Option<(u64, u64, u32)>) -> Result<Connected> {
     ensure!(
         common.relay.scheme() == "moqt",
         "this experiment uses raw QUIC; expected moqt:// URL"
@@ -154,7 +157,9 @@ async fn connect(common: &Common, windows: Option<(u64, u64)>) -> Result<Connect
     transport.keep_alive_interval(Some(Duration::from_secs(2)));
     transport.congestion_controller_factory(Arc::new(quinn::congestion::BbrConfig::default()));
     transport.mtu_discovery_config(None);
-    if let Some((connection, stream)) = windows {
+    if let Some((connection, stream, max_uni_streams)) = windows {
+        ensure!(max_uni_streams > 0, "max-uni-streams must be positive");
+        transport.max_concurrent_uni_streams(max_uni_streams.into());
         ensure!(
             connection >= HEADER as u64 && stream >= HEADER as u64,
             "receive windows must be at least 32 bytes"
@@ -301,7 +306,11 @@ async fn subscriber(args: SubscribeArgs, index: usize) -> Result<()> {
         Duration::from_secs(15),
         connect(
             &args.common,
-            Some((args.receive_window, args.stream_receive_window)),
+            Some((
+                args.receive_window,
+                args.stream_receive_window,
+                args.max_uni_streams,
+            )),
         ),
     )
     .await??;
@@ -321,7 +330,7 @@ async fn subscriber(args: SubscribeArgs, index: usize) -> Result<()> {
         _=time::sleep(Duration::from_secs(15))=>bail!("subscribe acknowledgement timed out"),
     };
     emit(
-        json!({"type":"ready","role":"subscriber","client":client,"cohort":cohort,"timestamp_unix_us":unix_us()?,"duration":args.common.duration,"stall_after":args.stall_after,"stall_for":args.stall_for,"receive_window":args.receive_window,"stream_receive_window":args.stream_receive_window}),
+        json!({"type":"ready","role":"subscriber","client":client,"cohort":cohort,"timestamp_unix_us":unix_us()?,"duration":args.common.duration,"stall_after":args.stall_after,"stall_for":args.stall_for,"receive_window":args.receive_window,"stream_receive_window":args.stream_receive_window,"max_uni_streams":args.max_uni_streams}),
     )?;
     stats(&connection, client, cohort, "ready")?;
     let drive = async {
