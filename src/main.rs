@@ -423,9 +423,12 @@ fn policy_termination_code(result: &Result<(), ServeError>) -> Option<u64> {
     }
 }
 fn expected_terminal_read_error(error: &anyhow::Error) -> bool {
+    // Upstream drops an unfinished object writer on RESET_STREAM, exposing
+    // ServeError::Size. That object is lost, never counted as delivered. Still
+    // require the separate PUBLISH_DONE(6); payload validation is not deferred.
     matches!(
         error.downcast_ref::<ServeError>(),
-        Some(ServeError::Cancel | ServeError::Closed(6))
+        Some(ServeError::Cancel | ServeError::Size | ServeError::Closed(6))
     )
 }
 #[tokio::main]
@@ -475,6 +478,9 @@ mod tests {
         )));
         assert!(expected_terminal_read_error(&anyhow::Error::new(
             ServeError::Cancel
+        )));
+        assert!(expected_terminal_read_error(&anyhow::Error::new(
+            ServeError::Size
         )));
         assert!(!expected_terminal_read_error(&anyhow::Error::new(
             ServeError::Closed(1)
