@@ -51,8 +51,8 @@ def main():
             story.append(Paragraph(inline(line[2:]), title))
             i += 1
             continue
-        if line.startswith("## "):
-            story.append(Paragraph(inline(line[3:]), heading))
+        if line.startswith(("## ", "### ")):
+            story.append(Paragraph(inline(line.lstrip("# ")), heading))
             i += 1
             continue
         if re.match(r"^\d+\. ", line):

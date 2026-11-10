@@ -1,20 +1,22 @@
-# Progress Report 2 - Group 16
+# Resource Isolation in MoQT Relays
 
-**Resource Isolation and Fair Scheduling in a MoQT Relay**  
-Kaustubh Bhal, Shradha Gandotra, Rudra Kanani, Sanat Dhanyamraju, Alan Zhu  
+Progress Report II - Group 16
+
+Kaustubh Bhal, Shradha Gandotra, Rudra Kanani, Sanat Dhanyamraju, Alan Zhu
+
 November 10, 2026
 
 ## 1. Problem Definition
 
 Our project studies how a Media over QUIC Transport (MoQT) relay should share memory and outgoing bandwidth among subscribers. A subscriber that stops keeping up can leave old media waiting for delivery. We want to stop that backlog from affecting other clients while helping the stalled subscriber return to current media.
 
-We have built a local testbed and implemented two policies: a fixed timeout that ends stalled subscriptions, and a policy that skips stale media streams while keeping the subscription open. We also added a shared bandwidth limit so the comparison includes real contention for a controlled resource. The DRR scheduler and adaptive resource budgets are not implemented yet.
+We have built a local testbed and implemented two policies: a fixed timeout that ends stalled subscriptions, and a policy that skips stale media streams while keeping the subscription open. We also added a shared bandwidth limit so the comparison includes real contention for a controlled resource. Compared with Report I, our completed work focuses on stalled-client recovery under a shared bandwidth limit. The DRR scheduler, per-session byte budgets, and global application-memory cap are not implemented yet; multi-track subscribers remain untested.
 
 ## 2. Motivation
 
 For live media, receiving every byte eventually is not enough. Our uncapped baseline showed paused subscribers receiving about 10 Mbit/s after resuming, even though the source produced only 4 Mbit/s. Much of that traffic was old backlog. When outgoing bandwidth is limited, this catch-up traffic can delay media for healthy clients too.
 
-Closing slow subscriptions protects other clients, but gives up on those subscribers. Our next question is whether dropping stale media can preserve that protection while letting the same subscribers recover.
+Closing slow subscriptions protects other clients, but gives up on those subscribers. We therefore tested whether dropping stale media could preserve that protection while letting the same subscribers recover.
 
 ## 3. Challenges
 
@@ -28,11 +30,11 @@ Finally, all processes share one machine. We excluded earlier runs with timing g
 
 We pinned Cloudflare's relay to draft-16 revision `3b2b584`. The original baseline uses its unchanged source. Our modifications are separate, reproducible patches, and each comparison uses matched relay and client binaries with recorded hashes.
 
-The Rust load generator publishes one synthetic track through direct `PUBLISH`. Each Object contains a sequence number, generation timestamp, and checkable payload. This gives us known offered load and complete-Object latency measurements. The workload exercises shared downstream fan-out; it does not test upstream `SUBSCRIBE` deduplication or encoded-video playback.
+The Rust load generator publishes one synthetic track through direct `PUBLISH`. Each Object contains a sequence number, generation timestamp, and checkable payload. This gives us known offered load and complete-Object latency measurements. We chose synthetic media Objects because they let us repeat the same workload and measure how much delivered data is still timely. Unlike a speed test or request-response benchmark, this workload continuously sends one source to many subscribers. It exercises shared downstream fan-out; it does not test upstream `SUBSCRIBE` deduplication or encoded-video playback. The variable-size keyframe workload and Big Buck Bunny replay proposed in Report I remain future work.
 
-| Setting | Local platform and workload |
+| **Setting** | **Local platform and workload** |
 | --- | --- |
-| Hardware | Apple M2 Pro; 10 reported CPUs; 16 GiB RAM |
+| Hardware | Apple M2 Pro; 10 CPUs; 16 GiB RAM |
 | Operating system | macOS 15.3.1, ARM64 |
 | Processes | One relay, one publisher, one subscriber generator; four runtime worker threads each |
 | Source | 30 Objects/s, 16,666 bytes each; approximately 4 Mbit/s; one new group per second |
@@ -47,7 +49,51 @@ Both policies use a three-second subgroup forwarding limit. Termination ends the
 
 We record complete Object delivery, stream resets, subscription terminations, QUIC counters, relay memory and CPU, commands, and source revisions. Terminated clients remain in throughput denominators through the planned end of the run.
 
-For PACE ICE, we prepared a four-node launcher: one relay, one publisher, and two client-generator nodes, requesting eight CPUs and 32 GiB per node for 30 minutes. These are requested resources, not confirmed server specifications. A local test of the four worker roles passed; no ICE experiment has run. Before testing there, we need to confirm allocation limits and shared storage, build Linux binaries, record the actual hardware, and check clock offsets. The commands are documented in `docs/pace-ice.md`. [4, 5]
+### Implementation checks and reproducibility
+
+Before collecting results, we tested the relay and client changes with real QUIC connections. These checks cover expiry while a stream is opening or waiting for acknowledgment, intentional resets in the middle of an Object, delivery of a fresh group afterward, and rejection of malformed or truncated data. The upstream Rust tests, client tests, formatting and static checks passed, along with 18 Python tests for the experiment and analysis tools. These are correctness checks; the 115 accepted local runs provide the performance evidence.
+
+We saved the source revision, patch and binary hashes, commands, raw event logs, and run-level summaries with each accepted dataset. Analysis retains clients that receive nothing or terminate, and reports recovery counts alongside recovery times. The repository also includes scripts to regenerate the figures. This gives us a repeatable local baseline to carry onto PACE.
+
+### Prepared first experiment on PACE ICE
+
+We prepared a four-node launcher: one relay node, one publisher node, and two client-generator nodes. Each generator creates half of the independent subscriber connections. The script requests eight CPUs and 32 GiB per node for 30 minutes, without GPUs. These are allocation requests, not confirmed physical server specifications or a guarantee of exclusive nodes. We will record the actual CPU, memory, operating system, network interfaces, and routes from the allocated machines. [4, 5]
+
+The launch script creates a certificate for the relay hostname, waits for relay and publisher readiness, starts the subscribers, collects process and protocol logs, and stops the other processes if a worker fails. A local integration test of all four worker roles passed using real QUIC traffic. This validates the coordination logic on one machine; it does not validate ICE allocation, software availability, or inter-node networking.
+
+Before submission, we need to confirm our course's ICE allocation and shared working directory, build the pinned relay and client as Linux binaries in a compute allocation, and check node-to-node connectivity and clock offsets. The existing macOS binaries cannot be reused. We will run load tests on compute nodes, not the login node. The [PACE guide](https://github.com/kaustubhbhal/moqt-relay-fairness/blob/codex/local-testbed/docs/pace-ice.md) records these steps and links to the ICE documentation; account-specific settings still need confirmation through GT sign-in. [4]
+
+The first submitted run will be a 20-second baseline check with 16 subscribers, no pauses, and the stock relay. This separates cluster setup problems from policy behavior. After the Linux build, the prepared submission command is:
+
+`mkdir -p logs results`
+
+`MOQT_CLIENTS=16 MOQT_DURATION=20 \`
+
+`MOQT_STALL_CLIENTS=0 sbatch scripts/ice.slurm`
+
+We will accept the run only if all four workers exit successfully, all 16 clients have ready and complete records, payload verification succeeds, and the publisher sustains the intended source rate. A returned job number alone does not mean the experiment succeeded. The logs must also show generator CPU headroom and the actual network path. We will report cross-node one-way latency only after checking clock-offset uncertainty. [5]
+
+After that check, the first repeated baseline comparison will use 16 clients with zero or eight paused for four seconds, five seconds after starting, followed by ten seconds of recovery. Both conditions will last 19 seconds and run five times in shuffled order. Eight clients run on each generator; the current placement puts the eight stalled clients on the first generator. We will keep placement fixed across comparisons and check its effect before scaling to larger client counts.
+
+Readiness scope: the current ICE launcher selects the stock relay and does not enable the local 80 Mbit/s cap or the terminate/skip policies. Reproducing those comparisons on ICE still requires adding selection of the patched Linux relay/client, their policy arguments and build hashes, and adapting analysis to the two generator logs. DRR and detailed per-region memory measurements are also unfinished. This report stops at the prepared, locally validated baseline handoff; no PACE experiment has been submitted or completed.
+
+### Memory ownership and limits
+
+To address the memory-isolation question from Report I, we traced the tested relay's storage and forwarding path. Figure 1 separates shared media from per-connection state. Our source is generated live, so there is no original file stored in the relay. Publisher memory and kernel socket buffers are outside the relay RSS we measure. [6]
+
+![Memory ownership diagram](figures/memory-regions.png)
+
+Figure 1. Memory ownership in the tested subgroup-stream path. Blue is shared media; orange is downstream connection state. The ingress region belongs to the upstream connection. Limits shown are configuration or job-count limits, not measured physical-memory peaks. A connection-wide maximum has not yet been established.
+
+A stalled subscription holds references to shared subgroup data, so it can keep old Objects alive even after healthy clients finish reading them. We must count each unique payload allocation once. The patched forwarder permits 128 active subgroup jobs and 1,024 FIN-acknowledgment waiters per subscription, but these count limits do not bound group size or total bytes. The three-second timeout is also not a strict memory budget. [6]
+
+The relay inherits Quinn's 10,000,000-byte send window (about 9.54 MiB) per QUIC connection. This limits outstanding stream-data accounting, not all connection memory. Unsent and sent-but-unacknowledged data occupy the same stream-buffer structure; they should not be counted as two full copies. Metadata, allocation overhead, and data retained behind acknowledgment gaps also matter. The subscriber's 64 KiB receive window does not cap the shared application data kept alive at the relay. [6, 7]
+
+For scale, our source produces 499,980 payload bytes per one-second group. If all 128 active jobs retain one full group each, their referenced payload is about 64 MB (61 MiB), excluding other regions. This is a conditional calculation, not an observed peak or a total-connection bound. A 15-second segment contains about 7.5 MB; eight clients retaining that same segment do not create eight separate copies in the shared store. Independent tracks or disjoint retained groups can add memory. Similarly, 100 independently full 10 MB transport windows represent 1 GB of logical stream data, but our small-window clients with ongoing ACKs did not demonstrate that condition.
+
+Our four-second runs measured median peak relay RSS of 26.98 MiB without skipping and 23.81 MiB with skipping. These are whole-process measurements. They do not establish a maximum per connection, memory exhaustion, or guaranteed memory isolation. The current evidence is strongest for bandwidth interference and recovery.
+
+The next memory experiment will begin with one stalled subscriber plus healthy clients, varying pause length and group size before increasing concurrency. We will compare shared-track and distinct-track traffic and measure unique retained payload bytes, per-subscription references, QUIC accounting, heap retention, and RSS separately. A separate delayed/lost-ACK test will stress transport retention. We will choose larger client counts from the measured incremental memory use and available node memory, rather than assume that every connection consumes 1 MB or 1 GB.
 
 ## 5. Related Work
 
@@ -69,22 +115,22 @@ Our latest experiment tests whether clients can recover without disconnecting. W
 
 To measure return to live, we look for the first complete one-second window after actual resume in which all received Objects meet the 150 ms target, at least 80% of the expected Objects arrive, and no delivery gap exceeds three frame intervals. Recovery time is the start of that window, confirmed using the following second. Clients without such a window before the ten-second observation limit are counted as unrecovered, not silently dropped.
 
-| Pause | Baseline recovered | Baseline recovery time | Skip recovered | Skip recovery time |
+| **Pause** | **Baseline recovered** | **Baseline recovery time** | **Skip recovered** | **Skip recovery time** |
 | --- | --- | --- | --- | --- |
 | 0.25 s | 40/40 | 0.088 s | 40/40 | 0.080 s |
 | 1 s | 40/40 | 1.733 s | 40/40 | 1.693 s |
 | 2 s | 40/40 | 4.104 s | 40/40 | 3.979 s |
 | 4 s | 30/40 | 8.443 s | 40/40 | 0.024 s |
 
-*Table 1. Recovery counts include all eight paused clients in each of five runs. Times are medians of per-run client medians, conditional on recovery; the four-second baseline excludes ten clients that did not recover within the observation window.*
+Table 1. Recovery counts include all eight paused clients in each of five runs. Times are medians of per-run client medians, conditional on recovery; the four-second baseline excludes ten clients that did not recover within the observation window.
 
 At four seconds, skip recovered all 40 paused clients on their original connections and subscriptions, with no terminations. The relay recorded 40 resynchronizations and clients recorded 40 intentional stream resets. Healthy-client P99 fell from 174 to 48 ms, while healthy timely goodput increased from 3.91 to 4.00 Mbit/s per client. Paused clients' timely goodput during the final five seconds was approximately 4.00 Mbit/s with skip, versus 1.30 Mbit/s with the baseline.
 
 The 24 ms recovery median needs context: skip's five run medians ranged from 5 ms to 2.104 seconds, and the slowest individual client took 2.398 seconds. This is promising preliminary evidence, not a guarantee of near-instant recovery. Termination achieved a lower healthy P99 of 13 ms in this condition, but closed all 40 paused subscriptions and delivered no recovery traffic to them.
 
-![Short-pause recovery comparison](../results/recovery/2026-11-10/figures/recovery.png)
+![Recovery results](../results/recovery/2026-11-10/figures/recovery.png)
 
-*Figure 1. All short-pause repetitions. Recovery counts include every paused client; timing points include only clients that recovered. Markers at ten seconds identify runs with unrecovered or terminated clients, not measured recovery times.*
+Figure 2. All short-pause repetitions. Recovery counts include every paused client; timing points include only clients that recovered. Markers at ten seconds identify runs with unrecovered or terminated clients, not measured recovery times.
 
 No policy reset or terminated a subscription during the shorter pauses. All clients recovered, but two-second pauses still required about four seconds of catch-up. The skip policy helps the four-second pause because it crosses the three-second lifetime threshold and abandons old work. It does not automatically help shorter stalls. This is a useful limitation of a fixed threshold and motivates comparing more deliberate scheduling and backlog policies.
 
@@ -92,14 +138,22 @@ All 75 runs passed duration checks, covering 1,200 client observations. Connecti
 
 These experiments use synthetic, independently usable groups on one machine. Real video may need keyframes before playback can resume; resetting a stream is not by itself proof of successful video recovery. We also have not tested higher incoming-stream concurrency, upstream subscription sharing, or separate-node network conditions. The timer is a fixed forwarding lifetime, not an adaptive buffer budget.
 
-Our next implementation step is byte-based DRR across subscriber sessions, followed by a comparison of DRR alone and DRR plus stale-media skipping under the same cap. We will then test encoded media and longer, uneven client workloads, and move the experiment to PACE ICE once its allocation is confirmed. The current results demonstrate contention, the cost of terminating stalled subscriptions, and a working way to recover them without disconnecting; they do not yet demonstrate fair scheduling.
+Our immediate next experimental step is the prepared PACE baseline check, followed by the repeated baseline comparison after the cluster checks pass. The next implementation step is byte-based DRR across subscriber sessions and support for the modified policies in the cluster launcher. We will compare DRR alone with DRR plus stale-media skipping under the same cap, measuring per-session throughput and Jain's fairness index alongside timely goodput, latency, and recovery. Multi-track subscribers, encoded media, and the memory-accounting experiments described above remain future work. The current results demonstrate contention and recovery without disconnecting; they do not yet demonstrate fair scheduling or a per-connection memory bound.
 
 ## References
 
-1. Kumar et al. **PicNIC: Predictable Virtualized NIC.** SIGCOMM 2019. [Paper](https://natefoster.org/papers/picnic.pdf).
-2. Gurel et al. **Media over QUIC: Initial Testing, Findings and Results.** MMSys 2023. [DOI](https://doi.org/10.1145/3587819.3593937); [authors' testbed](https://github.com/streaming-university/public-moq-demo).
-3. Shreedhar and Varghese. **Efficient Fair Queuing Using Deficit Round-Robin.** IEEE/ACM Transactions on Networking, 1996. [Paper](https://web.stanford.edu/class/ee384x/EE384X/papers/DRR.pdf).
-4. Georgia Tech PACE. [ICE job guide](https://gatech.service-now.com/home?id=kb_article_view&sysparm_article=KB0042096) and [storage guide](https://gatech.service-now.com/home?id=kb_article_view&sysparm_article=KB0042094), linked from the [GT teaching tutorial](https://sites.gatech.edu/higheducation2024/tutorial/).
-5. SchedMD. [sbatch](https://slurm.schedmd.com/sbatch.html) and [srun](https://slurm.schedmd.com/srun.html) documentation.
+1. Kumar et al. **PicNIC: Predictable Virtualized NIC.** SIGCOMM 2019. [Paper.](https://natefoster.org/papers/picnic.pdf)
 
-The accepted datasets are in `results/preliminary/2026-11-10/`, `results/policy/2026-11-10/`, and `results/recovery/2026-11-10/`. Each includes raw measurements and reproduction instructions. Implementation details are in `docs/capped-relay-experiments.md` and `docs/live-recovery-experiments.md`.
+[2. Gurel](https://natefoster.org/papers/picnic.pdf) et al. **Media over QUIC: Initial Testing, Findings and Results.** MMSys 2023. [DOI](https://doi.org/10.1145/3587819.3593937); [authors' testbed.](https://github.com/streaming-university/public-moq-demo)
+
+[3. Shreedhar](https://github.com/streaming-university/public-moq-demo) and Varghese. **Efficient Fair Queuing Using Deficit Round-Robin.** IEEE/ACM Transactions on Networking, 1996. [Paper.](https://web.stanford.edu/class/ee384x/EE384X/papers/DRR.pdf)
+
+[4. Georgia](https://web.stanford.edu/class/ee384x/EE384X/papers/DRR.pdf) Tech PACE. [ICE job guide](https://gatech.service-now.com/home?id=kb_article_view&sysparm_article=KB0042096) and [storage guide](https://gatech.service-now.com/home?id=kb_article_view&sysparm_article=KB0042094), linked from the [GT teaching tutorial.](https://sites.gatech.edu/higheducation2024/tutorial/)
+
+[5. SchedMD](https://sites.gatech.edu/higheducation2024/tutorial/). [sbatch](https://slurm.schedmd.com/sbatch.html) and [srun](https://slurm.schedmd.com/srun.html) documentation.
+
+6. [Project memory audit: ownership, source anchors, limits, and scale calculations for the tested relay.](https://github.com/kaustubhbhal/moqt-relay-fairness/blob/codex/local-testbed/docs/memory-isolation-audit.md)
+
+7. [Quinn-proto 0.11.13: transport configuration and send-buffer implementation.](https://docs.rs/quinn-proto/0.11.13/src/quinn_proto/config/transport.rs.html)
+
+[Project repository](https://github.com/kaustubhbhal/moqt-relay-fairness/tree/codex/local-testbed)
