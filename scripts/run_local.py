@@ -91,6 +91,12 @@ def main():
     p.add_argument("--receive-window", type=int, default=65_536)
     p.add_argument("--stream-receive-window", type=int, default=32_768)
     p.add_argument("--max-uni-streams", type=int, default=1)
+    p.add_argument("--relay-binary", type=Path)
+    p.add_argument("--variant-build-manifest", type=Path)
+    p.add_argument("--egress-mbps", type=float)
+    p.add_argument("--egress-burst-bytes", type=int, default=65536)
+    p.add_argument("--max-subgroup-age-ms", type=int)
+    p.add_argument("--allow-policy-termination", action="store_true")
     p.add_argument("--label", default="baseline")
     p.add_argument("--out", type=Path)
     args = p.parse_args()
@@ -101,7 +107,13 @@ def main():
     if min(args.bitrate, args.fps, args.group_frames, args.receive_window,
            args.stream_receive_window, args.max_uni_streams) <= 0:
         p.error("workload and window values must be positive")
-    relay = ROOT / "vendor/moq-rs/target/release/moq-relay-ietf"
+    if args.egress_mbps is not None and not 0 < args.egress_mbps < 1e9:
+        p.error("egress-mbps must be positive, finite, and below 1e9")
+    if args.max_subgroup_age_ms is not None and args.max_subgroup_age_ms <= 0:
+        p.error("max-subgroup-age-ms must be positive")
+    if args.egress_mbps is not None and args.egress_burst_bytes < 65536:
+        p.error("egress-burst-bytes must be at least 65536")
+    relay = (args.relay_binary or ROOT / "vendor/moq-rs/target/release/moq-relay-ietf").resolve()
     load = ROOT / "target/release/moqt-load"
     for executable in (relay, load):
         if not executable.is_file():
@@ -134,8 +146,15 @@ def main():
                         "--stream-receive-window", str(args.stream_receive_window),
                         "--max-uni-streams", str(args.max_uni_streams)],
     }
+    if args.egress_mbps is not None:
+        commands["relay"] += ["--egress-mbps", str(args.egress_mbps),
+                              "--egress-burst-bytes", str(args.egress_burst_bytes)]
+    if args.max_subgroup_age_ms is not None:
+        commands["relay"] += ["--max-subgroup-age-ms", str(args.max_subgroup_age_ms)]
+    if args.allow_policy_termination:
+        commands["subscribers"] += ["--allow-policy-termination"]
     manifest = {"schema_version": 1, "status": "running", "created_utc": tag,
-                "config": {**vars(args), "out": str(out)}, "commands": commands,
+                "config": {**{key: str(value) if isinstance(value, Path) else value for key, value in vars(args).items()}, "out": str(out)}, "commands": commands,
                 "git_commit": command_output(["git", "rev-parse", "HEAD"]),
                 "git_status": command_output(["git", "status", "--short"]),
                 "upstream_commit": command_output(["git", "-C", "vendor/moq-rs", "rev-parse", "HEAD"]),
@@ -149,6 +168,10 @@ def main():
                 "clock": "publisher and subscribers share one host wall clock",
                 "sampling_interval_seconds": 0.25,
                 "environment": {"RUST_LOG": "warn", "TOKIO_WORKER_THREADS": "4"}}
+    if args.variant_build_manifest:
+        manifest["variant_build"] = json.loads(args.variant_build_manifest.read_text())
+        if manifest["variant_build"]["binary_sha256"] != manifest["binary_sha256"]["relay"]:
+            raise ValueError("variant build manifest does not match the selected binary")
     manifest_path = out / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
     processes, handles = {}, []

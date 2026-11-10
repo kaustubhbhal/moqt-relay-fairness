@@ -29,6 +29,26 @@ def jain(values):
     return sum(values) ** 2 / denominator if denominator else None
 
 
+def metric_value(text, name):
+    for line in text.splitlines():
+        fields = line.split()
+        if len(fields) >= 2 and fields[0] == name:
+            return float(fields[1])
+    return None
+
+
+def egress_measurements(snapshots):
+    points = []
+    for event in snapshots:
+        count = metric_value(event["text"], "moq_relay_egress_udp_bytes_total")
+        if count is not None:
+            points.append((event["timestamp_unix_us"], count))
+    rate = None
+    if len(points) >= 2 and points[-1][0] > points[0][0]:
+        rate = (points[-1][1] - points[0][1]) * 8 / (points[-1][0] - points[0][0])
+    return rate
+
+
 def summarize_phase(records, ready, ids, start, end, deadline_ms=150):
     if end <= start:
         raise ValueError("empty or reversed measurement phase")
@@ -77,6 +97,9 @@ def summarize_run(path, deadline_ms=150):
     ready_records = [e for e in records if e.get("type") == "ready"]
     ready = {e["client"]: e["timestamp_unix_us"] for e in ready_records}
     completed = {e["client"] for e in records if e.get("type") == "complete"}
+    terminated = {e["client"]: e for e in records if e.get("type") == "subscription_terminated"}
+    if any(e.get("status_code") != 6 for e in terminated.values()):
+        raise ValueError("only an observed TOO_FAR_BEHIND is an allowed policy outcome")
     if set(ready) != expected or completed != expected:
         raise ValueError(f"{path}: missing ready or complete records")
     if any(e.get("type") == "client_error" for e in records):
@@ -92,6 +115,7 @@ def summarize_run(path, deadline_ms=150):
     process_all = read_events(path / "process.jsonl")
     process = [e for e in process_all if e["role"] == "relay"]
     published = [e for e in read_events(path / "publisher.jsonl") if e.get("type") == "published"]
+    metrics = read_events(path / "metrics.jsonl")
     anchor = statistics.median(ready.values())
     rows = []
     for phase, (start, end) in phases.items():
@@ -102,6 +126,8 @@ def summarize_run(path, deadline_ms=150):
             wall = (samples[-1]["timestamp_unix_us"] - samples[0]["timestamp_unix_us"]) / 1e6
             cpu = 100 * (samples[-1]["cpu_seconds"] - samples[0]["cpu_seconds"]) / wall
         source = [e for e in published if start <= (e["sent_unix_us"] - anchor) / 1e6 < end]
+        phase_metrics = [e for e in metrics if start <= (e["timestamp_unix_us"] - anchor) / 1e6 < end]
+        rate = egress_measurements(phase_metrics)
         role_cpu = {}
         for role in ("publisher", "subscribers"):
             points = [e for e in process_all if e["role"] == role and start <= (e["timestamp_unix_us"] - anchor) / 1e6 < end]
@@ -116,14 +142,25 @@ def summarize_run(path, deadline_ms=150):
                    "relay_cpu_percent_one_core": cpu,
                    "publisher_actual_objects_per_second": len(source) / (end - start),
                    "publisher_actual_mbps": sum(e["bytes"] for e in source) * 8 / (end - start) / 1e6,
+                   "egress_limit_mbps": config.get("egress_mbps"),
+                   "max_subgroup_age_ms": config.get("max_subgroup_age_ms"),
+                   "measured_udp_egress_mbps": rate,
+                   "terminated_clients_total": len(set(terminated) & ids),
+                   "termination_fraction_total": len(set(terminated) & ids) / len(ids) if ids else None,
                    **role_cpu}
             row.update(summarize_phase(records, ready, ids, start, end, deadline_ms))
             rows.append(row)
     stats = [e for e in records if e.get("type") == "quic_stats"]
     stall_checks = []
     for client in range(config["stall_clients"]):
-        begin = next(e for e in stats if e["client"] == client and e["phase"] == "stall_begin")
-        end = next(e for e in stats if e["client"] == client and e["phase"] == "stall_end")
+        begin = next((e for e in stats if e["client"] == client and e["phase"] == "stall_begin"), None)
+        end = next((e for e in stats if e["client"] == client and e["phase"] == "stall_end"), None)
+        if begin is None or end is None:
+            if client not in terminated:
+                raise ValueError(f"client {client}: incomplete pause without a terminal status")
+            stall_checks.append({"client": client, "observed_full_stall": False,
+                                 "termination_code": terminated[client]["status_code"]})
+            continue
         stall_checks.append({"client": client,
                              "udp_rx_bytes_during_stall": end["udp_rx_bytes"] - begin["udp_rx_bytes"],
                              "rx_stream_frames_during_stall": end["rx_stream_frames"] - begin["rx_stream_frames"],
@@ -132,6 +169,8 @@ def summarize_run(path, deadline_ms=150):
                              "acks_sent_during_stall": end["tx_acks"] - begin["tx_acks"],
                              "max_data_sent_during_stall": end["tx_max_data"] - begin["tx_max_data"]})
     return {"run": path.name, "rows": rows, "stall_checks": stall_checks,
+            "termination_events": list(terminated.values()),
+            "relay_too_far_behind_total": max((metric_value(e["text"], "moq_relay_too_far_behind_total") or 0 for e in metrics), default=0),
             "ready_spread_ms": (max(ready.values()) - min(ready.values())) / 1000}
 
 

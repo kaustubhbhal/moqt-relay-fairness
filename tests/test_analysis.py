@@ -41,6 +41,12 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual(analysis.percentile(list(range(1, 101)), .99), 99)
         self.assertEqual(analysis.jain([4, 4, 4]), 1)
 
+    def test_egress_uses_counter_difference_and_elapsed_time(self):
+        samples = [{"timestamp_unix_us": 1_000_000, "text": "moq_relay_egress_udp_bytes_total 1000\n"},
+                   {"timestamp_unix_us": 3_000_000, "text": "moq_relay_egress_udp_bytes_total 20001000\n"}]
+        self.assertEqual(analysis.egress_measurements(samples), 80)
+        self.assertIsNone(analysis.egress_measurements(samples[:1]))
+
     def test_duplicate_and_negative_time_rejected(self):
         event = self.event(0, 0, .5)
         with self.assertRaises(ValueError):

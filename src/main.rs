@@ -6,7 +6,7 @@ use clap::{Args, Parser, Subcommand};
 use futures::{stream::FuturesUnordered, StreamExt};
 use moq_transport::{
     coding::{KeyValuePairs, TrackNamespace},
-    serve::{Track, TrackReader, TrackReaderMode},
+    serve::{ServeError, Track, TrackReader, TrackReaderMode},
     session::{Publisher, Session, SessionId, Subscriber, Transport},
 };
 use serde_json::{json, Value};
@@ -74,6 +74,9 @@ struct SubscribeArgs {
     /// Bound concurrent receive subgroups to avoid the pinned latest-reader cache race.
     #[arg(long, default_value_t = 1)]
     max_uni_streams: u32,
+    /// Record a received TOO_FAR_BEHIND as an outcome, retaining the full run duration.
+    #[arg(long)]
+    allow_policy_termination: bool,
 }
 fn unix_us() -> Result<u64> {
     Ok(SystemTime::now()
@@ -355,18 +358,75 @@ async fn subscriber(args: SubscribeArgs, index: usize) -> Result<()> {
         (&mut run).await?;
         bail!("subscriber session ended early")
     };
-    tokio::select! {
-        r=drive=>r?,
-        r=receive(reader,client,cohort)=>r?,
-        r=subscription.closed()=>{r?;bail!("subscription ended early")},
-        _=time::sleep(duration(args.common.duration)?)=>{},
+    let measurement_end = Instant::now() + duration(args.common.duration)?;
+    let mut terminal_deadline = measurement_end;
+    let mut delivery_error = None;
+    let mut termination_code = None;
+    let receiver = receive(reader, client, cohort);
+    tokio::pin!(receiver);
+    tokio::pin!(drive);
+    loop {
+        tokio::select! {
+            biased;
+            result=subscription.closed()=>{
+                if let Some(code) = policy_termination_code(&result).filter(|_| args.allow_policy_termination) {
+                    termination_code = Some(code);
+                    emit(json!({"type":"subscription_terminated","client":client,"cohort":cohort,
+                        "status_code":code,"reason":"too_far_behind","timestamp_unix_us":unix_us()?,
+                        "preceding_delivery_error":delivery_error}))?;
+                    // A killed subscription receives zero bytes for the rest of the
+                    // scheduled run. Do not shrink its throughput denominator.
+                    time::sleep_until(measurement_end).await;
+                    break;
+                }
+                result.context("subscription ended without an allowed terminal status")?;
+                bail!("subscription ended early");
+            },
+            result=&mut drive=>{result?;bail!("session driver ended unexpectedly")},
+            result=&mut receiver,if delivery_error.is_none()=>{
+                let error = result.err().unwrap_or_else(|| anyhow::anyhow!("media reader ended early"));
+                if !args.allow_policy_termination || !expected_terminal_read_error(&error) {
+                    return Err(error);
+                }
+                emit(json!({"type":"delivery_error","client":client,"cohort":cohort,
+                    "error":format!("{error:#}"),"timestamp_unix_us":unix_us()?}))?;
+                delivery_error = Some(format!("{error:#}"));
+                // A stream reset can precede PUBLISH_DONE. Keep driving control
+                // traffic briefly; never guess a policy status from a reset.
+                terminal_deadline = Instant::now() + Duration::from_secs(2);
+            },
+            _=time::sleep_until(terminal_deadline),if delivery_error.is_some()=>{
+                bail!("media error without terminal status: {}", delivery_error.as_deref().unwrap_or("unknown"));
+            },
+            _=time::sleep_until(measurement_end)=>{
+                ensure!(delivery_error.is_none(), "media failed near measurement end without terminal status");
+                break;
+            },
+        }
     }
     stats(&connection, client, cohort, "complete")?;
     emit(
-        json!({"type":"complete","role":"subscriber","client":client,"cohort":cohort,"timestamp_unix_us":unix_us()?}),
+        json!({"type":"complete","role":"subscriber","client":client,"cohort":cohort,"timestamp_unix_us":unix_us()?,"termination_code":termination_code}),
     )?;
     connection.close(0u32.into(), b"experiment complete");
     Ok(())
+}
+
+fn policy_termination_code(result: &Result<(), ServeError>) -> Option<u64> {
+    match result {
+        Err(ServeError::Closed(code))
+            if *code == moq_transport::message::PublishDoneCode::TooFarBehind as u64 =>
+        {
+            Some(*code)
+        }
+        _ => None,
+    }
+}
+fn expected_terminal_read_error(error: &anyhow::Error) -> bool {
+    matches!(
+        error.downcast_ref::<ServeError>(),
+        Some(ServeError::Cancel | ServeError::Closed(6))
+    )
 }
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -408,6 +468,25 @@ async fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn a_stream_error_is_not_a_policy_termination() {
+        assert!(!expected_terminal_read_error(&anyhow::anyhow!(
+            "payload corruption"
+        )));
+        assert!(expected_terminal_read_error(&anyhow::Error::new(
+            ServeError::Cancel
+        )));
+        assert!(!expected_terminal_read_error(&anyhow::Error::new(
+            ServeError::Closed(1)
+        )));
+        assert_eq!(
+            policy_termination_code(&Err(ServeError::Closed(6))),
+            Some(6)
+        );
+        assert_eq!(policy_termination_code(&Err(ServeError::Cancel)), None);
+        assert_eq!(policy_termination_code(&Err(ServeError::Closed(1))), None);
+        assert_eq!(policy_termination_code(&Ok(())), None);
+    }
     #[test]
     fn payload_roundtrip_and_damage_detection() {
         let original = payload(42, 123456789, 4096).unwrap();
