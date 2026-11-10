@@ -21,8 +21,8 @@ def make_cert(out: Path, host: str) -> None:
         raise FileExistsError(f"refusing to replace an existing certificate in {out}")
     config = ("[req]\nprompt=no\ndistinguished_name=dn\nx509_extensions=ext\n"
               f"[dn]\nCN={host}\n[ext]\nsubjectAltName={san}\n"
-              "basicConstraints=critical,CA:TRUE\n"
-              "keyUsage=critical,digitalSignature,keyEncipherment,keyCertSign\n"
+              "basicConstraints=critical,CA:FALSE\n"
+              "keyUsage=critical,digitalSignature,keyEncipherment\n"
               "extendedKeyUsage=serverAuth\n")
     with tempfile.NamedTemporaryFile(mode="w", suffix=".cnf") as f:
         f.write(config)
