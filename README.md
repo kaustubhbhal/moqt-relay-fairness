@@ -10,7 +10,7 @@ See [the experiment design](docs/experiment-design.md), [measurement notes](docs
 
 For the patched relay, see [the capped-relay comparison](docs/capped-relay-experiments.md). It includes a separate reproducible build, identical-cap comparisons, and termination accounting that retains disconnected clients in throughput denominators.
 
-**Completed:** 20 baseline runs with 16 or 64 subscribers. Healthy clients stayed close to the source rate; paused clients received substantial late backlog after resuming. Read the [results and raw data](results/preliminary/2026-11-10/README.md), [Progress Report 2 draft](docs/progress-report-2.md), or [formatted PDF](output/pdf/progress-report-2-group-16.pdf).
+**Completed:** 20 baseline runs with 16 or 64 subscribers, plus [20 capped-policy runs](results/policy/2026-11-10/README.md) with 16 subscribers. Under the 80 Mbit/s cap, a three-second timeout reduced median healthy-client recovery P99 from 190 ms to 11 ms, while terminating all paused subscriptions. Healthy clients stayed close to the source rate; paused clients received substantial late backlog after resuming. Read the [results and raw data](results/preliminary/2026-11-10/README.md), [Progress Report 2 draft](docs/progress-report-2.md), or [formatted PDF](output/pdf/progress-report-2-group-16.pdf).
 
 ## Build
 

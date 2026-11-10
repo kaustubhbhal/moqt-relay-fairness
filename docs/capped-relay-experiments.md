@@ -1,6 +1,6 @@
 # Comparing an egress cap with a fixed subscription timeout
 
-This experiment adds two controls to the pinned relay: a shared limit on outgoing UDP traffic and an optional timeout for forwarding a subgroup. It compares the same patched binary with the timeout off and on. **This document describes how to run the comparison; it does not claim that the new experiment has produced results.** Check the saved run manifests and logs before adding findings to the report.
+This experiment adds two controls to the pinned relay: a shared limit on outgoing UDP traffic and an optional timeout for forwarding a subgroup. It compares the same patched binary with the timeout off and on. The completed 20-run comparison is archived in [the results directory](../results/policy/2026-11-10/README.md). This document explains how to reproduce and interpret it.
 
 The timeout closes a subscription that cannot finish forwarding a subgroup in time. It is **not** the adaptive scheduler proposed in Progress Report 1: there is no DRR scheduler, adaptive per-client budget, or global memory cap in this patch.
 

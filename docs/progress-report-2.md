@@ -8,7 +8,7 @@ November 10, 2026
 
 Our project studies how a Media over QUIC Transport (MoQT) relay should share memory and outgoing bandwidth among subscribers. A subscriber that stops keeping up can leave old media waiting for delivery. We want to limit the resources used by these subscribers while preserving useful service for other clients and keeping the benefits of a shared upstream track.
 
-Since the first report, we have built a working local testbed and completed 20 baseline experiments using the existing relay. We can now generate repeatable media traffic, pause selected subscribers, measure their recovery, and compare them with subscribers that keep receiving normally. The cross-session scheduler and adaptive resource limits are not implemented yet; the results below establish the baseline for that work.
+Since the first report, we have built a working local testbed and completed 20 baseline experiments using the existing relay. We have also implemented a shared outgoing-bandwidth limit and a fixed timeout that ends subscriptions which cannot finish forwarding a subgroup in time. This gives us a first policy to compare against the baseline. The cross-session scheduler and adaptive resource limits are still future work.
 
 ## 2. Motivation
 
@@ -43,7 +43,7 @@ We chose a paced synthetic workload first because it gives us a known offered lo
 | Receive limits | 64 KiB per connection, 32 KiB per stream, one incoming unidirectional stream |
 | Repetitions | Five per condition; condition order shuffled within each repetition |
 
-The harness saves Object logs, QUIC statistics, relay metrics, process memory and CPU samples, commands, configuration, and source revisions. All 20 measured runs completed with the expected subscribers and no client errors. During the pause interval, the publisher achieved 29.93-30.00 Objects/s. The paused connections received only about 25-34 KB each over 15 seconds while acknowledgements continued, confirming that the test created actual receive backpressure.
+The harness saves Object logs, QUIC statistics, relay metrics, process memory and CPU samples, commands, configuration, and source revisions. All 20 baseline runs completed with the expected subscribers and no client errors. During the pause interval, the publisher achieved 29.93-30.00 Objects/s. The paused connections received only about 25-34 KB each over 15 seconds while acknowledgements continued, confirming that the test created actual receive backpressure.
 
 For PACE ICE, we have prepared a four-node launcher: one relay node, one publisher node, and two subscriber-generator nodes. It requests eight CPUs and 32 GiB of memory per node for 30 minutes. These are requested resources, not confirmed server specifications. The launcher records the actual machines, waits for each component to become ready, and collects logs before exiting. A local integration test of the four worker roles passed; no ICE experiment has run yet.
 
@@ -51,7 +51,7 @@ The ICE scripts follow the official Slurm launch documentation and link to GT's 
 
 ## 5. Related Work
 
-**PicNIC: Predictable Virtualized NIC** isolates virtual machines using CPU-fair queues, receiver-driven congestion control, and sender-side shaping and accounting. The main idea relevant to our project is that bandwidth fairness alone does not protect every shared resource. We plan to adapt its accounting and admission-control principles to media sessions, where delayed Objects lose value and subscribers can share stored content. Our current work provides the measurements needed to evaluate that design. [1]
+**PicNIC: Predictable Virtualized NIC** isolates virtual machines using CPU-fair queues, receiver-driven congestion control, and sender-side shaping and accounting. The main idea relevant to our project is that bandwidth fairness alone does not protect every shared resource. We plan to adapt its accounting and admission-control principles to media sessions, where delayed Objects lose value and subscribers can share stored content. Our current implementation adds shared bandwidth accounting and a fixed forwarding deadline. It is an initial isolation policy, not an implementation of PicNIC's scheduling design. [1]
 
 **Media over QUIC: Initial Testing, Findings and Results** provides an early experimental foundation for MoQ. The authors' companion testbed extends Warp with client-server feedback and active and passive bandwidth measurements. Our work similarly uses a working transport testbed, but focuses on subscribers sharing a relay and the cost of stalled-client recovery. Our current synthetic workload isolates transport behavior; encoded-video tests remain future work. [2]
 
@@ -87,13 +87,36 @@ The recovery period showed a clearer effect. For the previously paused clients, 
 
 *Table 2. Medians over five runs, measured during seconds 20-30 for the previously paused cohort.*
 
-At 64 clients, median peak relay RSS during recovery was 64.89 MiB with pauses, versus 55.69 MiB without them. Median relay CPU was about 129% versus 78%, where 100% represents one core. Healthy-client median P99 remained similar, at 15.50 versus 14.78 ms. These results show extra recovery work and late media delivery, but do not yet demonstrate sustained harm to other subscribers or identify which buffers caused the memory difference.
+At 64 clients, median peak relay RSS during recovery was 64.89 MiB with pauses, versus 55.69 MiB without them. Median relay CPU was about 129% versus 78%, where 100% represents one core. Healthy-client median P99 remained similar, at 15.50 versus 14.78 ms. These uncapped results show extra recovery work and late media delivery, but do not establish sustained harm to other subscribers or identify which buffers caused the memory difference.
 
 ![Relay memory timeline](../results/preliminary/2026-11-10/figures/memory-timeline.png)
 
 *Figure 2. All repetitions are shown. The shaded interval is the pause; previously paused clients resume at second 20.*
 
-Our next step is to introduce a controlled, shared relay egress budget and use the same limit for every comparison policy. We will then implement session-level DRR and fixed backlog limits before adding adaptive limits. Evaluation will compare the stock relay, DRR alone, and DRR with limits using healthy-client P99, timely goodput, memory, and termination rate. We also need to repeat the tests with separate ICE nodes, higher incoming-stream concurrency after addressing the receiver issue, short pauses, and encoded-video replay. The main progress at this checkpoint is a working and repeatable testbed, a measured baseline, and evidence that recovery throughput can be dominated by late media.
+We then added an 80 Mbit/s shared outgoing UDP limit and compared the same patched relay with its forwarding timeout disabled or set to three seconds. This limit includes QUIC overhead, control traffic, and retransmissions, with a 64 KiB burst allowance. It is an application-controlled bottleneck, not a physical network link or a fair scheduler. The timeout starts when a downstream forwarder observes a subgroup and includes stream opening, forwarding, and the final acknowledgment. It does not directly measure distance from the live edge or guarantee a memory bound.
+
+We completed another 20 runs: 16 subscribers, none or eight paused, timeout off or on, and five repetitions of each condition. The workload, receive limits, pause interval, and cap were otherwise identical. The timeout ends the subscription with an explicit `TOO_FAR_BEHIND` response. Clients do not reconnect, and we keep terminated clients in the throughput calculation for the full planned interval.
+
+| Paused clients | Timeout | Healthy P99 (ms) | Healthy timely goodput (Mbit/s/client) | Peak relay RSS (MiB) |
+| --- | --- | --- | --- | --- |
+| 0 | Off | 23.37 | 4.002 | 28.83 |
+| 0 | 3 s | 23.28 | 4.003 | 26.17 |
+| 8 | Off | 189.62 | 3.860 | 36.92 |
+| 8 | 3 s | 10.93 | 4.000 | 23.70 |
+
+*Table 3. Medians of five run-level measurements during recovery, seconds 20-30. Every condition uses the same 80 Mbit/s UDP cap. Timely goodput counts complete Objects delivered within 150 ms.*
+
+Without the timeout, catch-up traffic pushed median outgoing UDP traffic to 79.85 Mbit/s, close to the cap. Healthy-client P99 was 175-206 ms across the five mixed runs, compared with 23-76 ms in the healthy-only control. With the timeout, healthy-client P99 was 10.93 ms at the median, and relay CPU fell from about 58% to 19% of one core. This gives us evidence of interference under a controlled bandwidth limit and shows that stopping stalled subscriptions can reduce it.
+
+The tradeoff is significant: the timeout terminated all eight paused subscriptions in every mixed run, or 40 out of 40 across repetitions. It terminated no healthy subscriptions. The terminated clients received zero goodput during recovery, and their recovery latency is undefined because no Objects arrived. Without the timeout, previously paused clients received a median 5.78 Mbit/s, but none of that recovery traffic met the 150 ms target; their median P99 was 14.94 seconds. The policy therefore protects healthy clients by giving up on stalled subscriptions. It does not yet demonstrate useful recovery or fair service for both groups.
+
+![Capped relay comparison](../results/policy/2026-11-10/figures/policy-comparison.png)
+
+*Figure 3. All five repetitions of each capped condition. The termination panel uses all 16 intended clients, so 50% means all eight paused clients were terminated. Latency and memory refer to the recovery interval.*
+
+We excluded earlier attempts with large timing gaps consistent with host suspension. The runner and analyzer now reject runs whose client observation interval differs from the planned duration by more than 0.5 seconds. The accepted batch used temporary sleep prevention; all 320 client observations lasted 30.000-30.013 seconds. The original 20 baseline runs also passed this check. We preserve the excluded-run diagnostics separately from the accepted measurements.
+
+Our next step is to test shorter pauses and a less aggressive policy that can return clients to current media without ending every stalled subscription. We will then add byte-based DRR and compare it with DRR plus backlog limits under the same cap. Separate-node ICE tests, higher incoming-stream concurrency, and encoded-video replay remain unfinished. We now have a repeatable baseline, an implemented isolation policy, and measurements showing both its benefit and its service cost.
 
 ## References
 
@@ -103,4 +126,4 @@ Our next step is to introduce a controlled, shared relay egress budget and use t
 4. Georgia Tech PACE. [ICE job guide](https://gatech.service-now.com/home?id=kb_article_view&sysparm_article=KB0042096) and [storage guide](https://gatech.service-now.com/home?id=kb_article_view&sysparm_article=KB0042094), linked from the [GT teaching tutorial](https://sites.gatech.edu/higheducation2024/tutorial/).
 5. SchedMD. [sbatch](https://slurm.schedmd.com/sbatch.html) and [srun](https://slurm.schedmd.com/srun.html) documentation.
 
-The raw measurements, run-level statistics, plots, and reproducibility notes are in `results/preliminary/2026-11-10/` in the project repository.
+The original baseline is in `results/preliminary/2026-11-10/`; the capped comparison is in `results/policy/2026-11-10/`. Both include raw measurements, run-level statistics, plots, and reproducibility notes. The implemented relay patch and commands are described in `docs/capped-relay-experiments.md`.

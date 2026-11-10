@@ -36,7 +36,7 @@ def main():
                              leading=16, spaceBefore=10, spaceAfter=7, keepWithNext=True)
     cell = ParagraphStyle("ReportCell", parent=body, fontSize=9, leading=11.5, spaceAfter=0)
     caption = ParagraphStyle("ReportCaption", parent=body, fontSize=9, leading=12, textColor=colors.HexColor("#444444"))
-    reference = ParagraphStyle("ReportReference", parent=body, fontSize=9.5, leading=12.5, spaceAfter=6)
+    reference = ParagraphStyle("ReportReference", parent=body, fontSize=9.5, leading=12.5, spaceAfter=6, keepWithNext=True)
     doc = SimpleDocTemplate(str(args.out), pagesize=letter, rightMargin=54, leftMargin=54,
                             topMargin=42, bottomMargin=44, title="Progress Report 2 - Group 16",
                             author="CS 4251 Group 16")
