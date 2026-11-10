@@ -1,5 +1,13 @@
 # Experimental relay patch
 
+`0002-same-subscription-recovery.patch` is a **cumulative alternative** to 0001, based on the same pinned upstream revision. Apply either patch to a clean upstream checkout; do not apply them in sequence. It adds a skip action and precise receiver stream-reset errors. Build it together with the compatible load client:
+
+```bash
+python3 scripts/build_variant.py --patch patches/0002-same-subscription-recovery.patch --build-client
+```
+
+Use the resulting manifest's `binary` and `client_binary` for the entire comparison, including baseline and termination controls. The `live-resync` Cargo feature is for this isolated patched client; building that feature against the unchanged stock vendor library is not supported. See `docs/live-recovery-experiments.md` for policy semantics and commands.
+
 `0001-egress-cap-and-subgroup-timeout.patch` applies to the exact vendor revision `3b2b584b47e4a18f3a6bf48dc9a665c736743443`. It adds:
 
 - `--egress-mbps`: one aggregate outgoing UDP-payload token bucket for the relay endpoint.

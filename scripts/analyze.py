@@ -184,6 +184,9 @@ def summarize_run(path, deadline_ms=150):
                              "acks_sent_during_stall": end["tx_acks"] - begin["tx_acks"],
                              "max_data_sent_during_stall": end["tx_max_data"] - begin["tx_max_data"]})
     return {"run": path.name, "rows": rows, "stall_checks": stall_checks,
+            "subgroup_reset_events": [e for e in records if e.get("type") == "subgroup_reset"],
+            "relay_live_resync_total": max((metric_value(e["text"], "moq_relay_live_resync_total") or 0 for e in metrics), default=0),
+            "relay_subgroups_abandoned_total": max((metric_value(e["text"], "moq_relay_subgroups_abandoned_total") or 0 for e in metrics), default=0),
             "termination_events": list(terminated.values()),
             "relay_too_far_behind_total": max((metric_value(e["text"], "moq_relay_too_far_behind_total") or 0 for e in metrics), default=0),
             "ready_spread_ms": (max(ready.values()) - min(ready.values())) / 1000}

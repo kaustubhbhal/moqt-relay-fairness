@@ -45,6 +45,8 @@ def load_conditions(path):
             raise ValueError(f"Duplicate run name: {run}")
         names.add(run)
         healthy = one_row(result, "comparison_healthy")
+        if healthy.get("subgroup_timeout_action") == "skip":
+            raise ValueError("This two-policy plot cannot combine skip and termination; use a recovery comparison")
         all_clients = one_row(result, "all")
         total = numeric(healthy["total_clients"], "total_clients")
         stalled = numeric(healthy["stall_clients"], "stall_clients")
