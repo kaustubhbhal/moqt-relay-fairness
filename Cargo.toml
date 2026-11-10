@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: 2026 MoQT Relay Fairness project contributors
+# SPDX-License-Identifier: MIT
+[package]
+name = "moqt-load"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.90"
+publish = false
+
+[dependencies]
+anyhow = "1"
+bytes = "1"
+clap = { version = "4", features = ["derive"] }
+futures = "0.3"
+moq-native-ietf = { path = "vendor/moq-rs/moq-native-ietf" }
+moq-transport = { path = "vendor/moq-rs/moq-transport" }
+quinn = { version = "0.11.9", features = ["ring", "qlog"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+url = "2"
+web-transport-quinn = { version = "0.11.8", default-features = false, features = ["ring"] }
