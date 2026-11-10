@@ -29,39 +29,43 @@
 
 ## Task 1: Pin the baseline
 
-- [ ] Commit the upstream submodule, toolchain, design, and README.
-- [ ] Build `cargo build --release --locked -p moq-relay-ietf --features metrics-prometheus` in `vendor/moq-rs`.
-- [ ] Check `vendor/moq-rs/target/release/moq-relay-ietf --help` against launcher flags.
+- [x] Commit the upstream submodule, toolchain, design, and README.
+- [x] Build `cargo build --release --locked -p moq-relay-ietf --features metrics-prometheus` in `vendor/moq-rs`.
+- [x] Check `vendor/moq-rs/target/release/moq-relay-ietf --help` against launcher flags.
 
 ## Task 2: Native workload client
 
 Files: `Cargo.toml`, `Cargo.lock`, `src/`.
 
-- [ ] Add `moqt-load publish` and `moqt-load subscribe`, using the pinned transport library.
-- [ ] Common flags: `--relay`, `--tls-root`, `--namespace`, `--duration`.
-- [ ] Publisher flags: `--bitrate`, `--fps`, `--group-frames`.
-- [ ] Subscriber flags: `--clients`, `--client-offset`, `--stall-clients`, `--stall-after`, `--stall-for`.
-- [ ] JSONL object fields: `type`, `client`, `cohort`, `seq`, `bytes`, `sent_unix_us`, `received_unix_us`, `latency_ms`. Lifecycle records use `type` and `timestamp_unix_us`.
-- [ ] Test payload encoding/decoding and rejection of invalid inputs; run `cargo test`, `cargo fmt --check`, and `cargo clippy -- -D warnings` for this crate.
-- [ ] Commit the client after a real relay smoke test.
+- [x] Add `moqt-load publish` and `moqt-load subscribe`, using the pinned transport library.
+- [x] Common flags: `--relay`, `--tls-root`, `--namespace`, `--duration`.
+- [x] Publisher flags: `--bitrate`, `--fps`, `--group-frames`.
+- [x] Subscriber flags: `--clients`, `--client-offset`, `--stall-clients`, `--stall-after`, `--stall-for`.
+- [x] JSONL object fields: `type`, `client`, `cohort`, `seq`, `bytes`, `sent_unix_us`, `received_unix_us`, `latency_ms`. Lifecycle records use `type` and `timestamp_unix_us`.
+- [x] Test payload encoding/decoding and rejection of invalid inputs; run `cargo test`, `cargo fmt --check`, and `cargo clippy -- -D warnings` for this crate.
+- [x] Commit the client after a real relay smoke test.
 
 ## Task 3: Local launcher and analysis
 
 Files: `scripts/make_cert.py`, `scripts/run_local.py`, `scripts/analyze.py`, `tests/test_analysis.py`.
 
-- [ ] Generate a local TLS certificate with a matching host/IP SAN.
-- [ ] Launch relay, publisher, and subscriber generator; poll real readiness with a deadline and stop all children on failure.
-- [ ] Save `manifest.json`, publisher/subscriber JSONL, process samples, metrics snapshots, stderr, and exit statuses.
-- [ ] Test analysis with an explicit zero-delivery client, phase boundaries, and known percentile/fairness examples using `python3 -m unittest discover -s tests -v`.
-- [ ] Run a small successful smoke test, a deliberate bad-input test, then repeated healthy/stalled comparisons at several session counts.
-- [ ] Commit runner, tests, and analysis before saving selected results in a separate commit.
+- [x] Generate a local TLS certificate with a matching host/IP SAN.
+- [x] Launch relay, publisher, and subscriber generator; poll real readiness with a deadline and stop all children on failure.
+- [x] Save `manifest.json`, publisher/subscriber JSONL, process samples, metrics snapshots, stderr, and exit statuses.
+- [x] Test analysis with an explicit zero-delivery client, phase boundaries, and known percentile/fairness examples using `python3 -m unittest discover -s tests -v`.
+- [x] Run a small successful smoke test, a deliberate bad-input test, then repeated healthy/stalled comparisons at several session counts.
+- [x] Commit runner, tests, and analysis before saving selected results in a separate commit.
 
 ## Task 4: ICE procedure and report evidence
 
 Files: `docs/pace-ice.md`, `scripts/ice.slurm`, `scripts/ice_worker.py`, `results/preliminary/`, `docs/progress-report-2.md`.
 
-- [ ] Provide a four-node allocation script with separate relay, publisher, and two load-generator roles, explicit timeouts, and shared result paths.
-- [ ] Link official ICE/Slurm documentation and label account-dependent values and untested cluster steps.
-- [ ] Syntax-check the launchers with `bash -n scripts/ice.slurm` and `python3 -m compileall -q scripts`.
-- [ ] Summarize actual local results with repetitions and limitations, retaining the six report sections and plain student-friendly wording.
-- [ ] Commit results and documentation; review repository status and transfer committed history back to the user's original local repo.
+- [x] Provide a four-node allocation script with separate relay, publisher, and two load-generator roles, explicit timeouts, and shared result paths.
+- [x] Link official ICE/Slurm documentation and label account-dependent values and untested cluster steps.
+- [x] Syntax-check the launchers with `bash -n scripts/ice.slurm` and `python3 -m compileall -q scripts`.
+- [x] Summarize actual local results with repetitions and limitations, retaining the six report sections and plain student-friendly wording.
+- [x] Commit results and documentation; review repository status and transfer committed history back to the user's original local repo.
+
+## Completion evidence
+
+All twenty matrix runs completed; compressed raw observations and checksums are saved in `results/preliminary/2026-11-10/`. Rust release tests, strict Clippy, formatting, six analysis tests, Bash/Python syntax checks, and the four-worker local integration test passed. The report was checked against the measurements and its five-page PDF was rendered for visual review. ICE itself remains untested. The original local repo and GitHub branch receive each completed checkpoint.

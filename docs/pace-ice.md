@@ -1,6 +1,6 @@
 # Running the testbed on PACE ICE
 
-These instructions prepare a four-node experiment on Georgia Tech's ICE cluster. **No ICE run has been completed or claimed by this repository's setup work.** The launcher has been checked locally for syntax; cluster access, installed software, allocation limits, and communication between nodes still need to be checked on ICE. Local results are separate from cluster results.
+These instructions prepare a four-node experiment on Georgia Tech's ICE cluster. **No ICE run has been completed or claimed by this repository's setup work.** Bash syntax and a local four-process integration test of the Python workers passed. Cluster access, installed software, allocation limits, and communication between nodes still need to be checked on ICE. Local results are separate from cluster results.
 
 ## What a batch job means
 
@@ -142,6 +142,8 @@ This launcher runs the stock pinned relay and the native publisher/subscriber lo
 Label laptop runs as local preliminary measurements. Label these files as prepared ICE scripts until a completed ICE job supplies logs. Report the actual allocated hardware and measured path, not a guessed server specification or results inferred from successful submission.
 
 ## Sources and verification status
+
+The worker integration check can be repeated on a development computer with `python3 tests/ice_local_smoke.py` after building both binaries. It uses four local processes and a mock allocation environment, with a real relay and TLS connections. It checks readiness, client completion, process samples, and cleanup. It does not invoke `sbatch` or `srun`, reserve cluster machines, or validate ICE networking.
 
 Reviewed November 10, 2026. The [GT teaching page](https://sites.gatech.edu/higheducation2024/tutorial/) links to the ICE job and storage articles above. Both ServiceNow article URLs were inaccessible through the documentation-fetch tool, so their current contents and account-specific limits were **not** independently verified. Open them through your normal GT sign-in if necessary.
 

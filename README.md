@@ -8,6 +8,8 @@ Cloudflare's relay is pinned to draft-16 revision `3b2b584b47e4a18f3a6bf48dc9a66
 
 See [the experiment design](docs/experiment-design.md), [measurement notes](docs/measurement-notes.md), and [PACE ICE procedure](docs/pace-ice.md).
 
+**Completed:** 20 baseline runs with 16 or 64 subscribers. Healthy clients stayed close to the source rate; paused clients received substantial late backlog after resuming. Read the [results and raw data](results/preliminary/2026-11-10/README.md), [Progress Report 2 draft](docs/progress-report-2.md), or [formatted PDF](output/pdf/progress-report-2-group-16.pdf).
+
 ## Build
 
 Install Rust through rustup, Python 3, and OpenSSL. The Python runner uses only the standard library. On Linux, use a normal compiler toolchain as well. Run from the repository root:
@@ -64,6 +66,10 @@ python3 -m unittest discover -s tests -v
 bash -n scripts/ice.slurm
 python3 -m compileall -q scripts
 ```
+
+`python3 tests/ice_local_smoke.py` additionally checks the four worker roles using local processes and real QUIC. It does not run on ICE or invoke Slurm.
+
+To regenerate the report PDF and figures, install the optional `requirements-report.txt` dependencies in a Python environment, then run `python3 scripts/build_report_pdf.py docs/progress-report-2.md --out output/pdf/progress-report-2-group-16.pdf`. Figure generation commands are included with the saved results.
 
 ## Repository layout
 
