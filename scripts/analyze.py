@@ -157,6 +157,8 @@ def summarize_run(path, deadline_ms=150):
                    "publisher_actual_mbps": sum(e["bytes"] for e in source) * 8 / (end - start) / 1e6,
                    "egress_limit_mbps": config.get("egress_mbps"),
                    "max_subgroup_age_ms": config.get("max_subgroup_age_ms"),
+                   "subgroup_timeout_action": config.get("subgroup_timeout_action") or ("terminate" if config.get("max_subgroup_age_ms") else "baseline"),
+                   "stall_for": config["stall_for"],
                    "measured_udp_egress_mbps": rate,
                    "terminated_clients_total": len(set(terminated) & ids),
                    "termination_fraction_total": len(set(terminated) & ids) / len(ids) if ids else None,

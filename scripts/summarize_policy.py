@@ -13,7 +13,7 @@ import statistics
 
 GROUP_FIELDS = (
     "total_clients", "stall_clients", "max_subgroup_age_ms", "egress_limit_mbps",
-    "phase", "cohort", "phase_seconds", "deadline_ms", "clients",
+    "phase", "cohort", "phase_seconds", "deadline_ms", "clients", "subgroup_timeout_action", "stall_for",
 )
 METRICS = (
     "latency_median_ms", "latency_p99_ms", "mean_client_goodput_mbps",
@@ -85,10 +85,10 @@ def summarize(inputs):
                 # measurements. Missing measurements remain undefined, never zero.
                 settings = {field: row.get(field) for field in GROUP_FIELDS}
                 for field in GROUP_FIELDS:
-                    if field not in ("max_subgroup_age_ms", "egress_limit_mbps") and settings[field] is None:
+                    if field not in ("max_subgroup_age_ms", "egress_limit_mbps", "subgroup_timeout_action", "stall_for") and settings[field] is None:
                         raise ValueError(f"{name}: missing grouping field {field}")
                 for field, value in settings.items():
-                    if field in ("phase", "cohort"):
+                    if field in ("phase", "cohort") or (field == "subgroup_timeout_action" and value is not None):
                         if not isinstance(value, str) or not value:
                             raise ValueError(f"{name}: invalid {field}")
                     elif value is not None:
@@ -148,6 +148,8 @@ def markdown(summary):
         for group in groups:
             m = group["metrics"]
             timeout = "off" if group["max_subgroup_age_ms"] is None else f"{group['max_subgroup_age_ms']:g}"
+            if group.get("subgroup_timeout_action") is not None:
+                timeout += f" / {group['subgroup_timeout_action']} / pause {group['stall_for']:g}s"
             prefix = f"| {group['stall_clients']} | {timeout} | {group['runs']} |"
             lines.append(prefix + " " + " | ".join((
                 cell(m["latency_p99_ms"]), cell(m["mean_client_goodput_mbps"], 3),
@@ -159,6 +161,8 @@ def markdown(summary):
         for group in groups:
             m = group["metrics"]
             timeout = "off" if group["max_subgroup_age_ms"] is None else f"{group['max_subgroup_age_ms']:g}"
+            if group.get("subgroup_timeout_action") is not None:
+                timeout += f" / {group['subgroup_timeout_action']} / pause {group['stall_for']:g}s"
             lines.append(f"| {group['stall_clients']} | {timeout} | {group['runs']} | " + " | ".join((
                 cell(m["relay_rss_peak_mib"]), cell(m["relay_cpu_percent_one_core"], 1),
                 cell(m["measured_udp_egress_mbps"], 3), cell(m["zero_delivery_clients"], 1),

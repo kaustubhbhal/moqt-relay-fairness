@@ -77,6 +77,12 @@ struct SubscribeArgs {
     /// Record a received TOO_FAR_BEHIND as an outcome, retaining the full run duration.
     #[arg(long)]
     allow_policy_termination: bool,
+    /// Permit stale media abandonment through the standard SUBSCRIBE parameter.
+    #[arg(long)]
+    delivery_timeout_ms: Option<u64>,
+    /// Continue on an explicit data-stream DELIVERY_TIMEOUT reset (patched build).
+    #[arg(long)]
+    allow_subgroup_reset: bool,
 }
 fn unix_us() -> Result<u64> {
     Ok(SystemTime::now()
@@ -271,7 +277,12 @@ async fn publish(args: PublishArgs) -> Result<()> {
     connection.close(0u32.into(), b"experiment complete");
     Ok(())
 }
-async fn receive(reader: TrackReader, client: usize, cohort: &str) -> Result<()> {
+async fn receive(
+    reader: TrackReader,
+    client: usize,
+    cohort: &str,
+    allow_reset: bool,
+) -> Result<()> {
     let mut subgroups = match reader.mode().await? {
         TrackReaderMode::Subgroups(s) => s,
         _ => bail!("expected subgroup delivery"),
@@ -282,7 +293,18 @@ async fn receive(reader: TrackReader, client: usize, cohort: &str) -> Result<()>
             item=subgroups.next()=>{
                 let Some(mut subgroup)=item? else { bail!("track ended") };
                 tasks.push(async move {
-                    while let Some(bytes)=subgroup.read_next().await? {
+                    loop {
+                        let bytes = match subgroup.read_next().await {
+                            Ok(Some(bytes)) => bytes,
+                            Ok(None) => break,
+                            Err(error) if allow_reset && delivery_reset(&error) => {
+                                emit(json!({"type":"subgroup_reset","client":client,"cohort":cohort,
+                                    "group_id":subgroup.group_id,"subgroup_id":subgroup.subgroup_id,
+                                    "code":2,"timestamp_unix_us":unix_us()?}))?;
+                                break;
+                            },
+                            Err(error) => return Err(error.into()),
+                        };
                         let received=unix_us()?;
                         let (seq,sent)=parse_payload(&bytes)?;
                         let latency=(received as i128-sent as i128) as f64/1000.0;
@@ -296,6 +318,14 @@ async fn receive(reader: TrackReader, client: usize, cohort: &str) -> Result<()>
     }
 }
 async fn subscriber(args: SubscribeArgs, index: usize) -> Result<()> {
+    ensure!(
+        !args.allow_subgroup_reset || cfg!(feature = "live-resync"),
+        "subgroup resets require the patched live-resync client build"
+    );
+    ensure!(
+        args.delivery_timeout_ms != Some(0),
+        "delivery timeout must be positive"
+    );
     let client = args.client_offset + index;
     let stalled = index < args.stall_clients;
     let cohort = if stalled { "stalled" } else { "healthy" };
@@ -327,13 +357,19 @@ async fn subscriber(args: SubscribeArgs, index: usize) -> Result<()> {
     .produce();
     let run = session.run();
     tokio::pin!(run);
+    let mut params = KeyValuePairs::default();
+    if let Some(ms) = args.delivery_timeout_ms {
+        params.set_intvalue(0x02, ms);
+    }
     let subscription = tokio::select! {
-        r=subscriber.subscribe_open(writer)=>r?,
+        r=subscriber.subscribe_open_with_params(writer, params)=>r?,
         r=&mut run=>{r?;bail!("session ended during subscribe setup")},
         _=time::sleep(Duration::from_secs(15))=>bail!("subscribe acknowledgement timed out"),
     };
+    let connection_id = connection.stable_id();
+    let subscription_id = subscription.id;
     emit(
-        json!({"type":"ready","role":"subscriber","client":client,"cohort":cohort,"timestamp_unix_us":unix_us()?,"duration":args.common.duration,"stall_after":args.stall_after,"stall_for":args.stall_for,"receive_window":args.receive_window,"stream_receive_window":args.stream_receive_window,"max_uni_streams":args.max_uni_streams}),
+        json!({"type":"ready","role":"subscriber","client":client,"cohort":cohort,"timestamp_unix_us":unix_us()?,"duration":args.common.duration,"stall_after":args.stall_after,"stall_for":args.stall_for,"receive_window":args.receive_window,"stream_receive_window":args.stream_receive_window,"max_uni_streams":args.max_uni_streams,"connection_id":connection_id,"subscription_id":subscription_id,"delivery_timeout_ms":args.delivery_timeout_ms}),
     )?;
     stats(&connection, client, cohort, "ready")?;
     let drive = async {
@@ -362,7 +398,7 @@ async fn subscriber(args: SubscribeArgs, index: usize) -> Result<()> {
     let mut terminal_deadline = measurement_end;
     let mut delivery_error = None;
     let mut termination_code = None;
-    let receiver = receive(reader, client, cohort);
+    let receiver = receive(reader, client, cohort, args.allow_subgroup_reset);
     tokio::pin!(receiver);
     tokio::pin!(drive);
     loop {
@@ -406,7 +442,7 @@ async fn subscriber(args: SubscribeArgs, index: usize) -> Result<()> {
     }
     stats(&connection, client, cohort, "complete")?;
     emit(
-        json!({"type":"complete","role":"subscriber","client":client,"cohort":cohort,"timestamp_unix_us":unix_us()?,"termination_code":termination_code}),
+        json!({"type":"complete","role":"subscriber","client":client,"cohort":cohort,"timestamp_unix_us":unix_us()?,"termination_code":termination_code,"connection_id":connection.stable_id(),"subscription_id":subscription.id}),
     )?;
     connection.close(0u32.into(), b"experiment complete");
     Ok(())
@@ -422,7 +458,25 @@ fn policy_termination_code(result: &Result<(), ServeError>) -> Option<u64> {
         _ => None,
     }
 }
+fn delivery_reset(error: &ServeError) -> bool {
+    #[cfg(feature = "live-resync")]
+    {
+        matches!(error, ServeError::Reset(2))
+    }
+    #[cfg(not(feature = "live-resync"))]
+    {
+        let _ = error;
+        false
+    }
+}
 fn expected_terminal_read_error(error: &anyhow::Error) -> bool {
+    #[cfg(feature = "live-resync")]
+    if matches!(
+        error.downcast_ref::<ServeError>(),
+        Some(ServeError::Reset(1))
+    ) {
+        return true;
+    }
     // Upstream drops an unfinished object writer on RESET_STREAM, exposing
     // ServeError::Size. That object is lost, never counted as delivered. Still
     // require the separate PUBLISH_DONE(6); payload validation is not deferred.
@@ -471,6 +525,19 @@ async fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "live-resync")]
+    #[test]
+    fn only_delivery_timeout_resets_are_recoverable() {
+        assert!(delivery_reset(&ServeError::Reset(2)));
+        for error in [
+            ServeError::Reset(1),
+            ServeError::Reset(0x12),
+            ServeError::Size,
+            ServeError::Closed(2),
+        ] {
+            assert!(!delivery_reset(&error));
+        }
+    }
     #[test]
     fn a_stream_error_is_not_a_policy_termination() {
         assert!(!expected_terminal_read_error(&anyhow::anyhow!(

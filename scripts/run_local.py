@@ -93,10 +93,14 @@ def main():
     p.add_argument("--stream-receive-window", type=int, default=32_768)
     p.add_argument("--max-uni-streams", type=int, default=1)
     p.add_argument("--relay-binary", type=Path)
+    p.add_argument("--load-binary", type=Path)
     p.add_argument("--variant-build-manifest", type=Path)
     p.add_argument("--egress-mbps", type=float)
     p.add_argument("--egress-burst-bytes", type=int, default=65536)
     p.add_argument("--max-subgroup-age-ms", type=int)
+    p.add_argument("--subgroup-timeout-action", choices=["terminate", "skip"])
+    p.add_argument("--delivery-timeout-ms", type=int)
+    p.add_argument("--allow-subgroup-reset", action="store_true")
     p.add_argument("--allow-policy-termination", action="store_true")
     p.add_argument("--label", default="baseline")
     p.add_argument("--out", type=Path)
@@ -112,10 +116,14 @@ def main():
         p.error("egress-mbps must be positive, finite, and below 1e9")
     if args.max_subgroup_age_ms is not None and args.max_subgroup_age_ms <= 0:
         p.error("max-subgroup-age-ms must be positive")
+    if args.delivery_timeout_ms is not None and args.delivery_timeout_ms <= 0:
+        p.error("delivery-timeout-ms must be positive")
+    if args.subgroup_timeout_action == "skip" and not (args.max_subgroup_age_ms and args.delivery_timeout_ms and args.allow_subgroup_reset):
+        p.error("skip requires a subgroup age, delivery-timeout permission, and reset-aware client")
     if args.egress_mbps is not None and args.egress_burst_bytes < 65536:
         p.error("egress-burst-bytes must be at least 65536")
     relay = (args.relay_binary or ROOT / "vendor/moq-rs/target/release/moq-relay-ietf").resolve()
-    load = ROOT / "target/release/moqt-load"
+    load = (args.load_binary or ROOT / "target/release/moqt-load").resolve()
     for executable in (relay, load):
         if not executable.is_file():
             p.error(f"build missing executable first: {executable}")
@@ -152,6 +160,12 @@ def main():
                               "--egress-burst-bytes", str(args.egress_burst_bytes)]
     if args.max_subgroup_age_ms is not None:
         commands["relay"] += ["--max-subgroup-age-ms", str(args.max_subgroup_age_ms)]
+    if args.subgroup_timeout_action:
+        commands["relay"] += ["--subgroup-timeout-action", args.subgroup_timeout_action]
+    if args.delivery_timeout_ms:
+        commands["subscribers"] += ["--delivery-timeout-ms", str(args.delivery_timeout_ms)]
+    if args.allow_subgroup_reset:
+        commands["subscribers"] += ["--allow-subgroup-reset"]
     if args.allow_policy_termination:
         commands["subscribers"] += ["--allow-policy-termination"]
     manifest = {"schema_version": 1, "status": "running", "created_utc": tag,
@@ -173,6 +187,8 @@ def main():
         manifest["variant_build"] = json.loads(args.variant_build_manifest.read_text())
         if manifest["variant_build"]["binary_sha256"] != manifest["binary_sha256"]["relay"]:
             raise ValueError("variant build manifest does not match the selected binary")
+        if "client_binary_sha256" in manifest["variant_build"] and manifest["variant_build"]["client_binary_sha256"] != manifest["binary_sha256"]["load"]:
+            raise ValueError("variant build manifest does not match the selected load binary")
     manifest_path = out / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
     processes, handles = {}, []

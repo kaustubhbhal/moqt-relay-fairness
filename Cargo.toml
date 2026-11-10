@@ -7,6 +7,10 @@ edition = "2021"
 rust-version = "1.90"
 publish = false
 
+[features]
+# Built only through build_variant.py against the patched transport checkout.
+live-resync = []
+
 [dependencies]
 anyhow = "1"
 bytes = "1"
