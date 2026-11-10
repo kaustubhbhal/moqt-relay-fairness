@@ -1,0 +1,165 @@
+{
+  "seed": 4252,
+  "runs": [
+    {
+      "repeat": 1,
+      "clients": 16,
+      "stall_clients": 0,
+      "timeout_ms": null,
+      "egress_mbps": 80.0,
+      "directory": "n16-s0-t0-r1"
+    },
+    {
+      "repeat": 1,
+      "clients": 16,
+      "stall_clients": 8,
+      "timeout_ms": 3000,
+      "egress_mbps": 80.0,
+      "directory": "n16-s8-t3000-r1"
+    },
+    {
+      "repeat": 1,
+      "clients": 16,
+      "stall_clients": 8,
+      "timeout_ms": null,
+      "egress_mbps": 80.0,
+      "directory": "n16-s8-t0-r1"
+    },
+    {
+      "repeat": 1,
+      "clients": 16,
+      "stall_clients": 0,
+      "timeout_ms": 3000,
+      "egress_mbps": 80.0,
+      "directory": "n16-s0-t3000-r1"
+    },
+    {
+      "repeat": 2,
+      "clients": 16,
+      "stall_clients": 0,
+      "timeout_ms": null,
+      "egress_mbps": 80.0,
+      "directory": "n16-s0-t0-r2"
+    },
+    {
+      "repeat": 2,
+      "clients": 16,
+      "stall_clients": 8,
+      "timeout_ms": 3000,
+      "egress_mbps": 80.0,
+      "directory": "n16-s8-t3000-r2"
+    },
+    {
+      "repeat": 2,
+      "clients": 16,
+      "stall_clients": 0,
+      "timeout_ms": 3000,
+      "egress_mbps": 80.0,
+      "directory": "n16-s0-t3000-r2"
+    },
+    {
+      "repeat": 2,
+      "clients": 16,
+      "stall_clients": 8,
+      "timeout_ms": null,
+      "egress_mbps": 80.0,
+      "directory": "n16-s8-t0-r2"
+    },
+    {
+      "repeat": 3,
+      "clients": 16,
+      "stall_clients": 0,
+      "timeout_ms": null,
+      "egress_mbps": 80.0,
+      "directory": "n16-s0-t0-r3"
+    },
+    {
+      "repeat": 3,
+      "clients": 16,
+      "stall_clients": 0,
+      "timeout_ms": 3000,
+      "egress_mbps": 80.0,
+      "directory": "n16-s0-t3000-r3"
+    },
+    {
+      "repeat": 3,
+      "clients": 16,
+      "stall_clients": 8,
+      "timeout_ms": 3000,
+      "egress_mbps": 80.0,
+      "directory": "n16-s8-t3000-r3"
+    },
+    {
+      "repeat": 3,
+      "clients": 16,
+      "stall_clients": 8,
+      "timeout_ms": null,
+      "egress_mbps": 80.0,
+      "directory": "n16-s8-t0-r3"
+    },
+    {
+      "repeat": 4,
+      "clients": 16,
+      "stall_clients": 8,
+      "timeout_ms": null,
+      "egress_mbps": 80.0,
+      "directory": "n16-s8-t0-r4"
+    },
+    {
+      "repeat": 4,
+      "clients": 16,
+      "stall_clients": 0,
+      "timeout_ms": null,
+      "egress_mbps": 80.0,
+      "directory": "n16-s0-t0-r4"
+    },
+    {
+      "repeat": 4,
+      "clients": 16,
+      "stall_clients": 8,
+      "timeout_ms": 3000,
+      "egress_mbps": 80.0,
+      "directory": "n16-s8-t3000-r4"
+    },
+    {
+      "repeat": 4,
+      "clients": 16,
+      "stall_clients": 0,
+      "timeout_ms": 3000,
+      "egress_mbps": 80.0,
+      "directory": "n16-s0-t3000-r4"
+    },
+    {
+      "repeat": 5,
+      "clients": 16,
+      "stall_clients": 0,
+      "timeout_ms": 3000,
+      "egress_mbps": 80.0,
+      "directory": "n16-s0-t3000-r5"
+    },
+    {
+      "repeat": 5,
+      "clients": 16,
+      "stall_clients": 8,
+      "timeout_ms": 3000,
+      "egress_mbps": 80.0,
+      "directory": "n16-s8-t3000-r5"
+    },
+    {
+      "repeat": 5,
+      "clients": 16,
+      "stall_clients": 8,
+      "timeout_ms": null,
+      "egress_mbps": 80.0,
+      "directory": "n16-s8-t0-r5"
+    },
+    {
+      "repeat": 5,
+      "clients": 16,
+      "stall_clients": 0,
+      "timeout_ms": null,
+      "egress_mbps": 80.0,
+      "directory": "n16-s0-t0-r5"
+    }
+  ]
+}

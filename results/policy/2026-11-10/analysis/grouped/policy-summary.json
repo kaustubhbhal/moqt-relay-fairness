@@ -1,0 +1,5000 @@
+{
+  "schema_version": 1,
+  "inputs": [
+    "results/policy/2026-11-10/analysis/summary.json"
+  ],
+  "run_count": 20,
+  "notes": [
+    "Each statistic summarizes run-level measurements; Objects are not pooled across runs.",
+    "Ranges are observed run minima and maxima, not confidence intervals.",
+    "Undefined values remain null. Each metric reports its defined and undefined run counts.",
+    "Goodput retains all expected clients for the full phase, including terminated clients.",
+    "Latency and late-Object fraction describe received Objects only; absent delivery has no P99.",
+    "Termination counts/fractions cover the entire run and are repeated across phase rows.",
+    "Relay RSS, CPU, and UDP egress are shared relay measurements repeated across cohorts.",
+    "UDP egress includes QUIC overhead and retransmissions; payload goodput does not.",
+    "Grouping uses settings available in analyzer output; verify other workload, burst, binary, and patch settings match before interpreting comparisons."
+  ],
+  "groups": [
+    {
+      "total_clients": 16,
+      "stall_clients": 0,
+      "max_subgroup_age_ms": null,
+      "egress_limit_mbps": 80.0,
+      "phase": "pre_stall",
+      "cohort": "all",
+      "phase_seconds": 3.0,
+      "deadline_ms": 150,
+      "clients": 16,
+      "timeout_enabled": false,
+      "runs": 5,
+      "run_names": [
+        "n16-s0-t0-r1",
+        "n16-s0-t0-r2",
+        "n16-s0-t0-r3",
+        "n16-s0-t0-r4",
+        "n16-s0-t0-r5"
+      ],
+      "metrics": {
+        "latency_median_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 15.608,
+          "min": 15.164,
+          "max": 15.72
+        },
+        "latency_p99_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.181,
+          "min": 22.964,
+          "max": 23.566
+        },
+        "mean_client_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.983174,
+          "max": 4.002617666666667
+        },
+        "mean_client_timely_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.983174,
+          "max": 4.002617666666667
+        },
+        "terminated_clients_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "termination_fraction_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "zero_delivery_clients": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "objects": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 1440,
+          "min": 1434,
+          "max": 1441
+        },
+        "jain_goodput": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.9999773031068665,
+          "min": 0.9999691367550384,
+          "max": 1.0
+        },
+        "late_object_fraction": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "relay_rss_peak_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.65625,
+          "min": 23.4375,
+          "max": 24.078125
+        },
+        "relay_rss_median_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.3125,
+          "min": 22.828125,
+          "max": 23.671875
+        },
+        "relay_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 41.04224926450425,
+          "min": 35.31588177745584,
+          "max": 42.45237699796154
+        },
+        "measured_udp_egress_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 66.03897956012267,
+          "min": 65.86763509570103,
+          "max": 66.19460185389374
+        },
+        "publisher_actual_objects_per_second": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 30.0,
+          "min": 30.0,
+          "max": 30.0
+        },
+        "publisher_actual_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.99984,
+          "max": 3.99984
+        },
+        "publisher_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2.6075638722770518,
+          "min": 1.8792061331274725,
+          "max": 2.9988593088903803
+        },
+        "subscribers_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 42.005224399784716,
+          "min": 35.69293704404621,
+          "max": 42.49345638046702
+        }
+      }
+    },
+    {
+      "total_clients": 16,
+      "stall_clients": 0,
+      "max_subgroup_age_ms": 3000,
+      "egress_limit_mbps": 80.0,
+      "phase": "pre_stall",
+      "cohort": "all",
+      "phase_seconds": 3.0,
+      "deadline_ms": 150,
+      "clients": 16,
+      "timeout_enabled": true,
+      "runs": 5,
+      "run_names": [
+        "n16-s0-t3000-r1",
+        "n16-s0-t3000-r2",
+        "n16-s0-t3000-r3",
+        "n16-s0-t3000-r4",
+        "n16-s0-t3000-r5"
+      ],
+      "metrics": {
+        "latency_median_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 15.558,
+          "min": 14.771,
+          "max": 15.607
+        },
+        "latency_p99_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.313,
+          "min": 22.858,
+          "max": 24.471
+        },
+        "mean_client_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.9942846666666667,
+          "max": 4.002617666666667
+        },
+        "mean_client_timely_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.9942846666666667,
+          "max": 4.002617666666667
+        },
+        "terminated_clients_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "termination_fraction_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "zero_delivery_clients": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "objects": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 1440,
+          "min": 1438,
+          "max": 1441
+        },
+        "jain_goodput": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.9999864595100664,
+          "min": 0.9999691367550384,
+          "max": 1.0
+        },
+        "late_object_fraction": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "relay_rss_peak_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.671875,
+          "min": 23.46875,
+          "max": 24.265625
+        },
+        "relay_rss_median_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.25,
+          "min": 23.171875,
+          "max": 23.7734375
+        },
+        "relay_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 39.03091172420379,
+          "min": 36.85545189390953,
+          "max": 47.59473221503844
+        },
+        "measured_udp_egress_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 66.00717556526556,
+          "min": 65.77802423883897,
+          "max": 66.1532804209344
+        },
+        "publisher_actual_objects_per_second": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 30.0,
+          "min": 29.666666666666668,
+          "max": 30.0
+        },
+        "publisher_actual_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.9553973333333334,
+          "max": 3.99984
+        },
+        "publisher_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2.272940791407678,
+          "min": 1.3645850603863006,
+          "max": 2.722672030330567
+        },
+        "subscribers_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 40.531116723176645,
+          "min": 35.81284412306111,
+          "max": 47.36034235735252
+        }
+      }
+    },
+    {
+      "total_clients": 16,
+      "stall_clients": 8,
+      "max_subgroup_age_ms": null,
+      "egress_limit_mbps": 80.0,
+      "phase": "pre_stall",
+      "cohort": "all",
+      "phase_seconds": 3.0,
+      "deadline_ms": 150,
+      "clients": 16,
+      "timeout_enabled": false,
+      "runs": 5,
+      "run_names": [
+        "n16-s8-t0-r1",
+        "n16-s8-t0-r2",
+        "n16-s8-t0-r3",
+        "n16-s8-t0-r4",
+        "n16-s8-t0-r5"
+      ],
+      "metrics": {
+        "latency_median_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 15.488,
+          "min": 15.155000000000001,
+          "max": 15.6265
+        },
+        "latency_p99_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.63,
+          "min": 22.847,
+          "max": 23.801
+        },
+        "mean_client_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.983174,
+          "max": 4.010950666666667
+        },
+        "mean_client_timely_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.983174,
+          "max": 4.010950666666667
+        },
+        "terminated_clients_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "termination_fraction_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "zero_delivery_clients": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "objects": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 1440,
+          "min": 1434,
+          "max": 1444
+        },
+        "jain_goodput": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.9999708230241351,
+          "min": 0.9999382754150978,
+          "max": 0.9999865345254767
+        },
+        "late_object_fraction": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "relay_rss_peak_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.890625,
+          "min": 21.046875,
+          "max": 24.265625
+        },
+        "relay_rss_median_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.4921875,
+          "min": 20.609375,
+          "max": 23.6875
+        },
+        "relay_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 38.73582714359954,
+          "min": 35.83329023487428,
+          "max": 40.46384487453998
+        },
+        "measured_udp_egress_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 66.13876082970634,
+          "min": 65.90217582048854,
+          "max": 66.22834308107
+        },
+        "publisher_actual_objects_per_second": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 30.0,
+          "min": 30.0,
+          "max": 30.0
+        },
+        "publisher_actual_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.99984,
+          "max": 3.99984
+        },
+        "publisher_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2.217675166769173,
+          "min": 2.2152842800473778,
+          "max": 2.398572095766075
+        },
+        "subscribers_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 38.366754658991496,
+          "min": 35.42440653048934,
+          "max": 40.86905316961645
+        }
+      }
+    },
+    {
+      "total_clients": 16,
+      "stall_clients": 8,
+      "max_subgroup_age_ms": 3000,
+      "egress_limit_mbps": 80.0,
+      "phase": "pre_stall",
+      "cohort": "all",
+      "phase_seconds": 3.0,
+      "deadline_ms": 150,
+      "clients": 16,
+      "timeout_enabled": true,
+      "runs": 5,
+      "run_names": [
+        "n16-s8-t3000-r1",
+        "n16-s8-t3000-r2",
+        "n16-s8-t3000-r3",
+        "n16-s8-t3000-r4",
+        "n16-s8-t3000-r5"
+      ],
+      "metrics": {
+        "latency_median_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 15.5455,
+          "min": 15.439,
+          "max": 15.765
+        },
+        "latency_p99_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.03,
+          "min": 22.962,
+          "max": 23.924
+        },
+        "mean_client_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.991507,
+          "max": 4.002617666666667
+        },
+        "mean_client_timely_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.991507,
+          "max": 4.002617666666667
+        },
+        "terminated_clients_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 8,
+          "min": 8,
+          "max": 8
+        },
+        "termination_fraction_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.5,
+          "min": 0.5,
+          "max": 0.5
+        },
+        "zero_delivery_clients": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "objects": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 1440,
+          "min": 1437,
+          "max": 1441
+        },
+        "jain_goodput": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.9999811138746194,
+          "min": 0.9999619563123628,
+          "max": 1.0
+        },
+        "late_object_fraction": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "relay_rss_peak_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.796875,
+          "min": 23.640625,
+          "max": 24.8125
+        },
+        "relay_rss_median_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.328125,
+          "min": 19.78125,
+          "max": 24.484375
+        },
+        "relay_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 41.07134989579079,
+          "min": 32.36046131883387,
+          "max": 45.24854727856165
+        },
+        "measured_udp_egress_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 66.01212887950045,
+          "min": 65.98584945256569,
+          "max": 66.31387748244754
+        },
+        "publisher_actual_objects_per_second": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 30.0,
+          "min": 30.0,
+          "max": 30.0
+        },
+        "publisher_actual_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.99984,
+          "max": 3.99984
+        },
+        "publisher_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2.374374394746527,
+          "min": 1.8617820456441931,
+          "max": 2.69835525128602
+        },
+        "subscribers_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 40.061382185586055,
+          "min": 32.42612248427333,
+          "max": 44.83256159059951
+        }
+      }
+    },
+    {
+      "total_clients": 16,
+      "stall_clients": 0,
+      "max_subgroup_age_ms": null,
+      "egress_limit_mbps": 80.0,
+      "phase": "pre_stall",
+      "cohort": "comparison_healthy",
+      "phase_seconds": 3.0,
+      "deadline_ms": 150,
+      "clients": 8,
+      "timeout_enabled": false,
+      "runs": 5,
+      "run_names": [
+        "n16-s0-t0-r1",
+        "n16-s0-t0-r2",
+        "n16-s0-t0-r3",
+        "n16-s0-t0-r4",
+        "n16-s0-t0-r5"
+      ],
+      "metrics": {
+        "latency_median_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 16.179,
+          "min": 14.413499999999999,
+          "max": 17.3245
+        },
+        "latency_p99_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.28,
+          "min": 22.829,
+          "max": 23.547
+        },
+        "mean_client_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.988729333333333,
+          "max": 4.005395333333333
+        },
+        "mean_client_timely_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.988729333333333,
+          "max": 4.005395333333333
+        },
+        "terminated_clients_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "termination_fraction_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "zero_delivery_clients": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "objects": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 720,
+          "min": 718,
+          "max": 721
+        },
+        "jain_goodput": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.9999865345254767,
+          "min": 0.9999691367550384,
+          "max": 1.0
+        },
+        "late_object_fraction": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "relay_rss_peak_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.65625,
+          "min": 23.4375,
+          "max": 24.078125
+        },
+        "relay_rss_median_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.3125,
+          "min": 22.828125,
+          "max": 23.671875
+        },
+        "relay_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 41.04224926450425,
+          "min": 35.31588177745584,
+          "max": 42.45237699796154
+        },
+        "measured_udp_egress_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 66.03897956012267,
+          "min": 65.86763509570103,
+          "max": 66.19460185389374
+        },
+        "publisher_actual_objects_per_second": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 30.0,
+          "min": 30.0,
+          "max": 30.0
+        },
+        "publisher_actual_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.99984,
+          "max": 3.99984
+        },
+        "publisher_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2.6075638722770518,
+          "min": 1.8792061331274725,
+          "max": 2.9988593088903803
+        },
+        "subscribers_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 42.005224399784716,
+          "min": 35.69293704404621,
+          "max": 42.49345638046702
+        }
+      }
+    },
+    {
+      "total_clients": 16,
+      "stall_clients": 0,
+      "max_subgroup_age_ms": 3000,
+      "egress_limit_mbps": 80.0,
+      "phase": "pre_stall",
+      "cohort": "comparison_healthy",
+      "phase_seconds": 3.0,
+      "deadline_ms": 150,
+      "clients": 8,
+      "timeout_enabled": true,
+      "runs": 5,
+      "run_names": [
+        "n16-s0-t3000-r1",
+        "n16-s0-t3000-r2",
+        "n16-s0-t3000-r3",
+        "n16-s0-t3000-r4",
+        "n16-s0-t3000-r5"
+      ],
+      "metrics": {
+        "latency_median_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 15.801,
+          "min": 15.608,
+          "max": 16.667
+        },
+        "latency_p99_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.062,
+          "min": 22.783,
+          "max": 24.521
+        },
+        "mean_client_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.99984,
+          "max": 4.005395333333333
+        },
+        "mean_client_timely_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.99984,
+          "max": 4.005395333333333
+        },
+        "terminated_clients_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "termination_fraction_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "zero_delivery_clients": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "objects": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 720,
+          "min": 720,
+          "max": 721
+        },
+        "jain_goodput": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.9999865345254767,
+          "min": 0.9999382754150978,
+          "max": 1.0
+        },
+        "late_object_fraction": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "relay_rss_peak_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.671875,
+          "min": 23.46875,
+          "max": 24.265625
+        },
+        "relay_rss_median_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.25,
+          "min": 23.171875,
+          "max": 23.7734375
+        },
+        "relay_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 39.03091172420379,
+          "min": 36.85545189390953,
+          "max": 47.59473221503844
+        },
+        "measured_udp_egress_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 66.00717556526556,
+          "min": 65.77802423883897,
+          "max": 66.1532804209344
+        },
+        "publisher_actual_objects_per_second": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 30.0,
+          "min": 29.666666666666668,
+          "max": 30.0
+        },
+        "publisher_actual_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.9553973333333334,
+          "max": 3.99984
+        },
+        "publisher_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2.272940791407678,
+          "min": 1.3645850603863006,
+          "max": 2.722672030330567
+        },
+        "subscribers_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 40.531116723176645,
+          "min": 35.81284412306111,
+          "max": 47.36034235735252
+        }
+      }
+    },
+    {
+      "total_clients": 16,
+      "stall_clients": 8,
+      "max_subgroup_age_ms": null,
+      "egress_limit_mbps": 80.0,
+      "phase": "pre_stall",
+      "cohort": "comparison_healthy",
+      "phase_seconds": 3.0,
+      "deadline_ms": 150,
+      "clients": 8,
+      "timeout_enabled": false,
+      "runs": 5,
+      "run_names": [
+        "n16-s8-t0-r1",
+        "n16-s8-t0-r2",
+        "n16-s8-t0-r3",
+        "n16-s8-t0-r4",
+        "n16-s8-t0-r5"
+      ],
+      "metrics": {
+        "latency_median_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 16.105,
+          "min": 13.468,
+          "max": 16.818
+        },
+        "latency_p99_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.274,
+          "min": 22.748,
+          "max": 23.979
+        },
+        "mean_client_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.983174,
+          "max": 4.005395333333333
+        },
+        "mean_client_timely_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.983174,
+          "max": 4.005395333333333
+        },
+        "terminated_clients_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "termination_fraction_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "zero_delivery_clients": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "objects": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 720,
+          "min": 717,
+          "max": 721
+        },
+        "jain_goodput": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.9999691367550384,
+          "min": 0.9999557576596957,
+          "max": 1.0
+        },
+        "late_object_fraction": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "relay_rss_peak_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.890625,
+          "min": 21.046875,
+          "max": 24.265625
+        },
+        "relay_rss_median_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.4921875,
+          "min": 20.609375,
+          "max": 23.6875
+        },
+        "relay_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 38.73582714359954,
+          "min": 35.83329023487428,
+          "max": 40.46384487453998
+        },
+        "measured_udp_egress_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 66.13876082970634,
+          "min": 65.90217582048854,
+          "max": 66.22834308107
+        },
+        "publisher_actual_objects_per_second": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 30.0,
+          "min": 30.0,
+          "max": 30.0
+        },
+        "publisher_actual_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.99984,
+          "max": 3.99984
+        },
+        "publisher_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2.217675166769173,
+          "min": 2.2152842800473778,
+          "max": 2.398572095766075
+        },
+        "subscribers_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 38.366754658991496,
+          "min": 35.42440653048934,
+          "max": 40.86905316961645
+        }
+      }
+    },
+    {
+      "total_clients": 16,
+      "stall_clients": 8,
+      "max_subgroup_age_ms": 3000,
+      "egress_limit_mbps": 80.0,
+      "phase": "pre_stall",
+      "cohort": "comparison_healthy",
+      "phase_seconds": 3.0,
+      "deadline_ms": 150,
+      "clients": 8,
+      "timeout_enabled": true,
+      "runs": 5,
+      "run_names": [
+        "n16-s8-t3000-r1",
+        "n16-s8-t3000-r2",
+        "n16-s8-t3000-r3",
+        "n16-s8-t3000-r4",
+        "n16-s8-t3000-r5"
+      ],
+      "metrics": {
+        "latency_median_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 16.1185,
+          "min": 15.729,
+          "max": 16.7875
+        },
+        "latency_p99_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.085,
+          "min": 22.978,
+          "max": 24.426
+        },
+        "mean_client_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.988729333333333,
+          "max": 4.010950666666666
+        },
+        "mean_client_timely_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.988729333333333,
+          "max": 4.010950666666666
+        },
+        "terminated_clients_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "termination_fraction_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "zero_delivery_clients": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "objects": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 720,
+          "min": 718,
+          "max": 722
+        },
+        "jain_goodput": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.9999769804487275,
+          "min": 0.9999557576596957,
+          "max": 1.0
+        },
+        "late_object_fraction": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "relay_rss_peak_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.796875,
+          "min": 23.640625,
+          "max": 24.8125
+        },
+        "relay_rss_median_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.328125,
+          "min": 19.78125,
+          "max": 24.484375
+        },
+        "relay_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 41.07134989579079,
+          "min": 32.36046131883387,
+          "max": 45.24854727856165
+        },
+        "measured_udp_egress_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 66.01212887950045,
+          "min": 65.98584945256569,
+          "max": 66.31387748244754
+        },
+        "publisher_actual_objects_per_second": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 30.0,
+          "min": 30.0,
+          "max": 30.0
+        },
+        "publisher_actual_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.99984,
+          "max": 3.99984
+        },
+        "publisher_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2.374374394746527,
+          "min": 1.8617820456441931,
+          "max": 2.69835525128602
+        },
+        "subscribers_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 40.061382185586055,
+          "min": 32.42612248427333,
+          "max": 44.83256159059951
+        }
+      }
+    },
+    {
+      "total_clients": 16,
+      "stall_clients": 8,
+      "max_subgroup_age_ms": null,
+      "egress_limit_mbps": 80.0,
+      "phase": "pre_stall",
+      "cohort": "stalled",
+      "phase_seconds": 3.0,
+      "deadline_ms": 150,
+      "clients": 8,
+      "timeout_enabled": false,
+      "runs": 5,
+      "run_names": [
+        "n16-s8-t0-r1",
+        "n16-s8-t0-r2",
+        "n16-s8-t0-r3",
+        "n16-s8-t0-r4",
+        "n16-s8-t0-r5"
+      ],
+      "metrics": {
+        "latency_median_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 13.869,
+          "min": 13.5205,
+          "max": 16.198
+        },
+        "latency_p99_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.762,
+          "min": 23.104,
+          "max": 24.256
+        },
+        "mean_client_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.983174,
+          "max": 4.016506
+        },
+        "mean_client_timely_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.983174,
+          "max": 4.016506
+        },
+        "terminated_clients_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "termination_fraction_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "zero_delivery_clients": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "objects": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 720,
+          "min": 717,
+          "max": 723
+        },
+        "jain_goodput": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.9999713052660574,
+          "min": 0.9999074159800018,
+          "max": 0.9999864595100664
+        },
+        "late_object_fraction": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "relay_rss_peak_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.890625,
+          "min": 21.046875,
+          "max": 24.265625
+        },
+        "relay_rss_median_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.4921875,
+          "min": 20.609375,
+          "max": 23.6875
+        },
+        "relay_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 38.73582714359954,
+          "min": 35.83329023487428,
+          "max": 40.46384487453998
+        },
+        "measured_udp_egress_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 66.13876082970634,
+          "min": 65.90217582048854,
+          "max": 66.22834308107
+        },
+        "publisher_actual_objects_per_second": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 30.0,
+          "min": 30.0,
+          "max": 30.0
+        },
+        "publisher_actual_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.99984,
+          "max": 3.99984
+        },
+        "publisher_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2.217675166769173,
+          "min": 2.2152842800473778,
+          "max": 2.398572095766075
+        },
+        "subscribers_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 38.366754658991496,
+          "min": 35.42440653048934,
+          "max": 40.86905316961645
+        }
+      }
+    },
+    {
+      "total_clients": 16,
+      "stall_clients": 8,
+      "max_subgroup_age_ms": 3000,
+      "egress_limit_mbps": 80.0,
+      "phase": "pre_stall",
+      "cohort": "stalled",
+      "phase_seconds": 3.0,
+      "deadline_ms": 150,
+      "clients": 8,
+      "timeout_enabled": true,
+      "runs": 5,
+      "run_names": [
+        "n16-s8-t3000-r1",
+        "n16-s8-t3000-r2",
+        "n16-s8-t3000-r3",
+        "n16-s8-t3000-r4",
+        "n16-s8-t3000-r5"
+      ],
+      "metrics": {
+        "latency_median_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 14.985,
+          "min": 14.172,
+          "max": 15.412
+        },
+        "latency_p99_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 22.979,
+          "min": 22.899,
+          "max": 23.66
+        },
+        "mean_client_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.9942846666666667,
+          "max": 3.99984
+        },
+        "mean_client_timely_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.9942846666666667,
+          "max": 3.99984
+        },
+        "terminated_clients_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 8,
+          "min": 8,
+          "max": 8
+        },
+        "termination_fraction_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 1.0,
+          "min": 1.0,
+          "max": 1.0
+        },
+        "zero_delivery_clients": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "objects": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 720,
+          "min": 719,
+          "max": 720
+        },
+        "jain_goodput": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.9999864595100664,
+          "min": 0.9999691367550384,
+          "max": 1.0
+        },
+        "late_object_fraction": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "relay_rss_peak_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.796875,
+          "min": 23.640625,
+          "max": 24.8125
+        },
+        "relay_rss_median_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.328125,
+          "min": 19.78125,
+          "max": 24.484375
+        },
+        "relay_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 41.07134989579079,
+          "min": 32.36046131883387,
+          "max": 45.24854727856165
+        },
+        "measured_udp_egress_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 66.01212887950045,
+          "min": 65.98584945256569,
+          "max": 66.31387748244754
+        },
+        "publisher_actual_objects_per_second": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 30.0,
+          "min": 30.0,
+          "max": 30.0
+        },
+        "publisher_actual_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.99984,
+          "max": 3.99984
+        },
+        "publisher_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2.374374394746527,
+          "min": 1.8617820456441931,
+          "max": 2.69835525128602
+        },
+        "subscribers_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 40.061382185586055,
+          "min": 32.42612248427333,
+          "max": 44.83256159059951
+        }
+      }
+    },
+    {
+      "total_clients": 16,
+      "stall_clients": 0,
+      "max_subgroup_age_ms": null,
+      "egress_limit_mbps": 80.0,
+      "phase": "stall",
+      "cohort": "all",
+      "phase_seconds": 15.0,
+      "deadline_ms": 150,
+      "clients": 16,
+      "timeout_enabled": false,
+      "runs": 5,
+      "run_names": [
+        "n16-s0-t0-r1",
+        "n16-s0-t0-r2",
+        "n16-s0-t0-r3",
+        "n16-s0-t0-r4",
+        "n16-s0-t0-r5"
+      ],
+      "metrics": {
+        "latency_median_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 15.335,
+          "min": 15.091,
+          "max": 15.5925
+        },
+        "latency_p99_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.617,
+          "min": 23.199,
+          "max": 26.925
+        },
+        "mean_client_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.9992844666666665,
+          "max": 4.000395533333333
+        },
+        "mean_client_timely_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.9992844666666665,
+          "max": 4.000395533333333
+        },
+        "terminated_clients_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "termination_fraction_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "zero_delivery_clients": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "objects": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 7200,
+          "min": 7199,
+          "max": 7201
+        },
+        "jain_goodput": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.9999997105678397,
+          "min": 0.9999984765057907,
+          "max": 1.0
+        },
+        "late_object_fraction": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "relay_rss_peak_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 27.8125,
+          "min": 25.96875,
+          "max": 28.0
+        },
+        "relay_rss_median_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 24.796875,
+          "min": 22.765625,
+          "max": 24.96875
+        },
+        "relay_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 42.648697711472245,
+          "min": 40.54794788056283,
+          "max": 45.17454107970849
+        },
+        "measured_udp_egress_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 66.06520137748329,
+          "min": 66.0515117938109,
+          "max": 66.0890554709372
+        },
+        "publisher_actual_objects_per_second": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 30.0,
+          "min": 30.0,
+          "max": 30.0
+        },
+        "publisher_actual_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.99984,
+          "max": 3.99984
+        },
+        "publisher_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2.3809951416814563,
+          "min": 1.9665732725196545,
+          "max": 2.7378565964103005
+        },
+        "subscribers_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 47.492608027312194,
+          "min": 44.82525339491957,
+          "max": 49.62348437900625
+        }
+      }
+    },
+    {
+      "total_clients": 16,
+      "stall_clients": 0,
+      "max_subgroup_age_ms": 3000,
+      "egress_limit_mbps": 80.0,
+      "phase": "stall",
+      "cohort": "all",
+      "phase_seconds": 15.0,
+      "deadline_ms": 150,
+      "clients": 16,
+      "timeout_enabled": true,
+      "runs": 5,
+      "run_names": [
+        "n16-s0-t3000-r1",
+        "n16-s0-t3000-r2",
+        "n16-s0-t3000-r3",
+        "n16-s0-t3000-r4",
+        "n16-s0-t3000-r5"
+      ],
+      "metrics": {
+        "latency_median_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 15.497,
+          "min": 15.356,
+          "max": 15.627
+        },
+        "latency_p99_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.391,
+          "min": 23.098,
+          "max": 26.528
+        },
+        "mean_client_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.998728933333333,
+          "max": 4.0015066
+        },
+        "mean_client_timely_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.998728933333333,
+          "max": 4.0015066
+        },
+        "terminated_clients_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "termination_fraction_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "zero_delivery_clients": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "objects": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 7200,
+          "min": 7198,
+          "max": 7203
+        },
+        "jain_goodput": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.9999994595766415,
+          "min": 0.9999992483122876,
+          "max": 1.0
+        },
+        "late_object_fraction": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "relay_rss_peak_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 28.25,
+          "min": 24.6875,
+          "max": 28.890625
+        },
+        "relay_rss_median_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 25.0625,
+          "min": 21.359375,
+          "max": 25.65625
+        },
+        "relay_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 42.51057075755064,
+          "min": 40.827647176183,
+          "max": 44.64703186396049
+        },
+        "measured_udp_egress_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 66.04150409003728,
+          "min": 66.03194546253329,
+          "max": 66.07476995220347
+        },
+        "publisher_actual_objects_per_second": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 30.0,
+          "min": 30.0,
+          "max": 30.066666666666666
+        },
+        "publisher_actual_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.99984,
+          "max": 4.008728533333334
+        },
+        "publisher_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2.588791812223757,
+          "min": 2.132073566716984,
+          "max": 2.8586141683535886
+        },
+        "subscribers_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 46.5348216391145,
+          "min": 45.18553614426799,
+          "max": 49.82587490356446
+        }
+      }
+    },
+    {
+      "total_clients": 16,
+      "stall_clients": 8,
+      "max_subgroup_age_ms": null,
+      "egress_limit_mbps": 80.0,
+      "phase": "stall",
+      "cohort": "all",
+      "phase_seconds": 15.0,
+      "deadline_ms": 150,
+      "clients": 16,
+      "timeout_enabled": false,
+      "runs": 5,
+      "run_names": [
+        "n16-s8-t0-r1",
+        "n16-s8-t0-r2",
+        "n16-s8-t0-r3",
+        "n16-s8-t0-r4",
+        "n16-s8-t0-r5"
+      ],
+      "metrics": {
+        "latency_median_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 5.695,
+          "min": 5.325,
+          "max": 6.037
+        },
+        "latency_p99_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 10.849,
+          "min": 9.815,
+          "max": 13.639
+        },
+        "mean_client_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2.0004755333333333,
+          "min": 1.9982534,
+          "max": 2.004364266666667
+        },
+        "mean_client_timely_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2.0004755333333333,
+          "min": 1.9982534,
+          "max": 2.004364266666667
+        },
+        "terminated_clients_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "termination_fraction_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "zero_delivery_clients": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 8,
+          "min": 6,
+          "max": 8
+        },
+        "objects": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3601,
+          "min": 3597,
+          "max": 3608
+        },
+        "jain_goodput": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.49999938271681144,
+          "min": 0.4999975654003038,
+          "max": 0.5005537071307635
+        },
+        "late_object_fraction": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "relay_rss_peak_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 32.84375,
+          "min": 29.515625,
+          "max": 33.53125
+        },
+        "relay_rss_median_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 27.140625,
+          "min": 23.90625,
+          "max": 27.640625
+        },
+        "relay_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 19.301384340458352,
+          "min": 18.900805831747768,
+          "max": 20.53575967061455
+        },
+        "measured_udp_egress_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 33.071479578149756,
+          "min": 33.05172189115464,
+          "max": 33.09680218769315
+        },
+        "publisher_actual_objects_per_second": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 30.0,
+          "min": 30.0,
+          "max": 30.0
+        },
+        "publisher_actual_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.99984,
+          "max": 3.99984
+        },
+        "publisher_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2.464611263027011,
+          "min": 2.259908672296807,
+          "max": 2.9416352208141903
+        },
+        "subscribers_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 21.073154497969043,
+          "min": 19.85938324014603,
+          "max": 21.216893934849228
+        }
+      }
+    },
+    {
+      "total_clients": 16,
+      "stall_clients": 8,
+      "max_subgroup_age_ms": 3000,
+      "egress_limit_mbps": 80.0,
+      "phase": "stall",
+      "cohort": "all",
+      "phase_seconds": 15.0,
+      "deadline_ms": 150,
+      "clients": 16,
+      "timeout_enabled": true,
+      "runs": 5,
+      "run_names": [
+        "n16-s8-t3000-r1",
+        "n16-s8-t3000-r2",
+        "n16-s8-t3000-r3",
+        "n16-s8-t3000-r4",
+        "n16-s8-t3000-r5"
+      ],
+      "metrics": {
+        "latency_median_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 5.8934999999999995,
+          "min": 5.41,
+          "max": 6.076499999999999
+        },
+        "latency_p99_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 10.644,
+          "min": 9.483,
+          "max": 11.423
+        },
+        "mean_client_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2.0004755333333333,
+          "min": 1.99992,
+          "max": 2.0015866
+        },
+        "mean_client_timely_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2.0004755333333333,
+          "min": 1.99992,
+          "max": 2.0015866
+        },
+        "terminated_clients_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 8,
+          "min": 8,
+          "max": 8
+        },
+        "termination_fraction_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.5,
+          "min": 0.5,
+          "max": 0.5
+        },
+        "zero_delivery_clients": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 8,
+          "min": 7,
+          "max": 8
+        },
+        "objects": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3601,
+          "min": 3600,
+          "max": 3603
+        },
+        "jain_goodput": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.5,
+          "min": 0.4999995375514398,
+          "max": 0.5002773142149166
+        },
+        "late_object_fraction": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "relay_rss_peak_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 25.078125,
+          "min": 22.171875,
+          "max": 26.609375
+        },
+        "relay_rss_median_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.9375,
+          "min": 21.140625,
+          "max": 25.296875
+        },
+        "relay_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 19.426828949941445,
+          "min": 17.904900283082647,
+          "max": 21.103473206879677
+        },
+        "measured_udp_egress_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 33.09387502175355,
+          "min": 33.074068831423695,
+          "max": 33.10665277346648
+        },
+        "publisher_actual_objects_per_second": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 30.0,
+          "min": 30.0,
+          "max": 30.0
+        },
+        "publisher_actual_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.99984,
+          "max": 3.99984
+        },
+        "publisher_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2.6114440625932906,
+          "min": 2.2634861074424726,
+          "max": 3.083334304012651
+        },
+        "subscribers_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 20.239816612269035,
+          "min": 18.79220315606136,
+          "max": 21.37934607158627
+        }
+      }
+    },
+    {
+      "total_clients": 16,
+      "stall_clients": 0,
+      "max_subgroup_age_ms": null,
+      "egress_limit_mbps": 80.0,
+      "phase": "stall",
+      "cohort": "comparison_healthy",
+      "phase_seconds": 15.0,
+      "deadline_ms": 150,
+      "clients": 8,
+      "timeout_enabled": false,
+      "runs": 5,
+      "run_names": [
+        "n16-s0-t0-r1",
+        "n16-s0-t0-r2",
+        "n16-s0-t0-r3",
+        "n16-s0-t0-r4",
+        "n16-s0-t0-r5"
+      ],
+      "metrics": {
+        "latency_median_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 15.6765,
+          "min": 14.152999999999999,
+          "max": 16.157
+        },
+        "latency_p99_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.639,
+          "min": 23.192,
+          "max": 27.125
+        },
+        "mean_client_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.998728933333333,
+          "max": 4.0009510666666666
+        },
+        "mean_client_timely_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.998728933333333,
+          "max": 4.0009510666666666
+        },
+        "terminated_clients_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "termination_fraction_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "zero_delivery_clients": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "objects": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3600,
+          "min": 3599,
+          "max": 3601
+        },
+        "jain_goodput": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.9999994601767783,
+          "min": 0.9999987654336229,
+          "max": 1.0
+        },
+        "late_object_fraction": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "relay_rss_peak_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 27.8125,
+          "min": 25.96875,
+          "max": 28.0
+        },
+        "relay_rss_median_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 24.796875,
+          "min": 22.765625,
+          "max": 24.96875
+        },
+        "relay_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 42.648697711472245,
+          "min": 40.54794788056283,
+          "max": 45.17454107970849
+        },
+        "measured_udp_egress_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 66.06520137748329,
+          "min": 66.0515117938109,
+          "max": 66.0890554709372
+        },
+        "publisher_actual_objects_per_second": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 30.0,
+          "min": 30.0,
+          "max": 30.0
+        },
+        "publisher_actual_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.99984,
+          "max": 3.99984
+        },
+        "publisher_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2.3809951416814563,
+          "min": 1.9665732725196545,
+          "max": 2.7378565964103005
+        },
+        "subscribers_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 47.492608027312194,
+          "min": 44.82525339491957,
+          "max": 49.62348437900625
+        }
+      }
+    },
+    {
+      "total_clients": 16,
+      "stall_clients": 0,
+      "max_subgroup_age_ms": 3000,
+      "egress_limit_mbps": 80.0,
+      "phase": "stall",
+      "cohort": "comparison_healthy",
+      "phase_seconds": 15.0,
+      "deadline_ms": 150,
+      "clients": 8,
+      "timeout_enabled": true,
+      "runs": 5,
+      "run_names": [
+        "n16-s0-t3000-r1",
+        "n16-s0-t3000-r2",
+        "n16-s0-t3000-r3",
+        "n16-s0-t3000-r4",
+        "n16-s0-t3000-r5"
+      ],
+      "metrics": {
+        "latency_median_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 15.527,
+          "min": 14.473500000000001,
+          "max": 15.872
+        },
+        "latency_p99_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.382,
+          "min": 23.061,
+          "max": 27.085
+        },
+        "mean_client_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.9976178666666664,
+          "max": 4.002062133333333
+        },
+        "mean_client_timely_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.9976178666666664,
+          "max": 4.002062133333333
+        },
+        "terminated_clients_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "termination_fraction_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "zero_delivery_clients": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "objects": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3600,
+          "min": 3598,
+          "max": 3602
+        },
+        "jain_goodput": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.9999994601767783,
+          "min": 0.9999990730452686,
+          "max": 1.0
+        },
+        "late_object_fraction": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "relay_rss_peak_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 28.25,
+          "min": 24.6875,
+          "max": 28.890625
+        },
+        "relay_rss_median_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 25.0625,
+          "min": 21.359375,
+          "max": 25.65625
+        },
+        "relay_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 42.51057075755064,
+          "min": 40.827647176183,
+          "max": 44.64703186396049
+        },
+        "measured_udp_egress_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 66.04150409003728,
+          "min": 66.03194546253329,
+          "max": 66.07476995220347
+        },
+        "publisher_actual_objects_per_second": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 30.0,
+          "min": 30.0,
+          "max": 30.066666666666666
+        },
+        "publisher_actual_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.99984,
+          "max": 4.008728533333334
+        },
+        "publisher_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2.588791812223757,
+          "min": 2.132073566716984,
+          "max": 2.8586141683535886
+        },
+        "subscribers_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 46.5348216391145,
+          "min": 45.18553614426799,
+          "max": 49.82587490356446
+        }
+      }
+    },
+    {
+      "total_clients": 16,
+      "stall_clients": 8,
+      "max_subgroup_age_ms": null,
+      "egress_limit_mbps": 80.0,
+      "phase": "stall",
+      "cohort": "comparison_healthy",
+      "phase_seconds": 15.0,
+      "deadline_ms": 150,
+      "clients": 8,
+      "timeout_enabled": false,
+      "runs": 5,
+      "run_names": [
+        "n16-s8-t0-r1",
+        "n16-s8-t0-r2",
+        "n16-s8-t0-r3",
+        "n16-s8-t0-r4",
+        "n16-s8-t0-r5"
+      ],
+      "metrics": {
+        "latency_median_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 5.695,
+          "min": 5.325,
+          "max": 6.037
+        },
+        "latency_p99_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 10.849,
+          "min": 9.815,
+          "max": 13.639
+        },
+        "mean_client_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 4.0009510666666666,
+          "min": 3.9965068,
+          "max": 4.0065064
+        },
+        "mean_client_timely_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 4.0009510666666666,
+          "min": 3.9965068,
+          "max": 4.0065064
+        },
+        "terminated_clients_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "termination_fraction_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "zero_delivery_clients": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "objects": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3601,
+          "min": 3597,
+          "max": 3606
+        },
+        "jain_goodput": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.9999987654336229,
+          "min": 0.9999951308006076,
+          "max": 0.9999990771536464
+        },
+        "late_object_fraction": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "relay_rss_peak_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 32.84375,
+          "min": 29.515625,
+          "max": 33.53125
+        },
+        "relay_rss_median_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 27.140625,
+          "min": 23.90625,
+          "max": 27.640625
+        },
+        "relay_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 19.301384340458352,
+          "min": 18.900805831747768,
+          "max": 20.53575967061455
+        },
+        "measured_udp_egress_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 33.071479578149756,
+          "min": 33.05172189115464,
+          "max": 33.09680218769315
+        },
+        "publisher_actual_objects_per_second": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 30.0,
+          "min": 30.0,
+          "max": 30.0
+        },
+        "publisher_actual_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.99984,
+          "max": 3.99984
+        },
+        "publisher_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2.464611263027011,
+          "min": 2.259908672296807,
+          "max": 2.9416352208141903
+        },
+        "subscribers_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 21.073154497969043,
+          "min": 19.85938324014603,
+          "max": 21.216893934849228
+        }
+      }
+    },
+    {
+      "total_clients": 16,
+      "stall_clients": 8,
+      "max_subgroup_age_ms": 3000,
+      "egress_limit_mbps": 80.0,
+      "phase": "stall",
+      "cohort": "comparison_healthy",
+      "phase_seconds": 15.0,
+      "deadline_ms": 150,
+      "clients": 8,
+      "timeout_enabled": true,
+      "runs": 5,
+      "run_names": [
+        "n16-s8-t3000-r1",
+        "n16-s8-t3000-r2",
+        "n16-s8-t3000-r3",
+        "n16-s8-t3000-r4",
+        "n16-s8-t3000-r5"
+      ],
+      "metrics": {
+        "latency_median_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 5.8934999999999995,
+          "min": 5.4079999999999995,
+          "max": 6.076499999999999
+        },
+        "latency_p99_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 10.644,
+          "min": 9.483,
+          "max": 11.423
+        },
+        "mean_client_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 4.0009510666666666,
+          "min": 3.998728933333333,
+          "max": 4.002062133333333
+        },
+        "mean_client_timely_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 4.0009510666666666,
+          "min": 3.998728933333333,
+          "max": 4.002062133333333
+        },
+        "terminated_clients_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "termination_fraction_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "zero_delivery_clients": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "objects": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3601,
+          "min": 3599,
+          "max": 3602
+        },
+        "jain_goodput": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.9999994595766415,
+          "min": 0.9999990751028796,
+          "max": 1.0
+        },
+        "late_object_fraction": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "relay_rss_peak_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 25.078125,
+          "min": 22.171875,
+          "max": 26.609375
+        },
+        "relay_rss_median_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.9375,
+          "min": 21.140625,
+          "max": 25.296875
+        },
+        "relay_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 19.426828949941445,
+          "min": 17.904900283082647,
+          "max": 21.103473206879677
+        },
+        "measured_udp_egress_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 33.09387502175355,
+          "min": 33.074068831423695,
+          "max": 33.10665277346648
+        },
+        "publisher_actual_objects_per_second": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 30.0,
+          "min": 30.0,
+          "max": 30.0
+        },
+        "publisher_actual_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.99984,
+          "max": 3.99984
+        },
+        "publisher_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2.6114440625932906,
+          "min": 2.2634861074424726,
+          "max": 3.083334304012651
+        },
+        "subscribers_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 20.239816612269035,
+          "min": 18.79220315606136,
+          "max": 21.37934607158627
+        }
+      }
+    },
+    {
+      "total_clients": 16,
+      "stall_clients": 8,
+      "max_subgroup_age_ms": null,
+      "egress_limit_mbps": 80.0,
+      "phase": "stall",
+      "cohort": "stalled",
+      "phase_seconds": 15.0,
+      "deadline_ms": 150,
+      "clients": 8,
+      "timeout_enabled": false,
+      "runs": 5,
+      "run_names": [
+        "n16-s8-t0-r1",
+        "n16-s8-t0-r2",
+        "n16-s8-t0-r3",
+        "n16-s8-t0-r4",
+        "n16-s8-t0-r5"
+      ],
+      "metrics": {
+        "latency_median_ms": {
+          "runs": 5,
+          "defined_runs": 1,
+          "undefined_runs": 4,
+          "median": 5.3395,
+          "min": 5.3395,
+          "max": 5.3395
+        },
+        "latency_p99_ms": {
+          "runs": 5,
+          "defined_runs": 1,
+          "undefined_runs": 4,
+          "median": 5.392,
+          "min": 5.392,
+          "max": 5.392
+        },
+        "mean_client_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0022221333333333334
+        },
+        "mean_client_timely_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0022221333333333334
+        },
+        "terminated_clients_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "termination_fraction_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "zero_delivery_clients": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 8,
+          "min": 6,
+          "max": 8
+        },
+        "objects": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 2
+        },
+        "jain_goodput": {
+          "runs": 5,
+          "defined_runs": 1,
+          "undefined_runs": 4,
+          "median": 0.25,
+          "min": 0.25,
+          "max": 0.25
+        },
+        "late_object_fraction": {
+          "runs": 5,
+          "defined_runs": 1,
+          "undefined_runs": 4,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "relay_rss_peak_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 32.84375,
+          "min": 29.515625,
+          "max": 33.53125
+        },
+        "relay_rss_median_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 27.140625,
+          "min": 23.90625,
+          "max": 27.640625
+        },
+        "relay_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 19.301384340458352,
+          "min": 18.900805831747768,
+          "max": 20.53575967061455
+        },
+        "measured_udp_egress_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 33.071479578149756,
+          "min": 33.05172189115464,
+          "max": 33.09680218769315
+        },
+        "publisher_actual_objects_per_second": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 30.0,
+          "min": 30.0,
+          "max": 30.0
+        },
+        "publisher_actual_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.99984,
+          "max": 3.99984
+        },
+        "publisher_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2.464611263027011,
+          "min": 2.259908672296807,
+          "max": 2.9416352208141903
+        },
+        "subscribers_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 21.073154497969043,
+          "min": 19.85938324014603,
+          "max": 21.216893934849228
+        }
+      }
+    },
+    {
+      "total_clients": 16,
+      "stall_clients": 8,
+      "max_subgroup_age_ms": 3000,
+      "egress_limit_mbps": 80.0,
+      "phase": "stall",
+      "cohort": "stalled",
+      "phase_seconds": 15.0,
+      "deadline_ms": 150,
+      "clients": 8,
+      "timeout_enabled": true,
+      "runs": 5,
+      "run_names": [
+        "n16-s8-t3000-r1",
+        "n16-s8-t3000-r2",
+        "n16-s8-t3000-r3",
+        "n16-s8-t3000-r4",
+        "n16-s8-t3000-r5"
+      ],
+      "metrics": {
+        "latency_median_ms": {
+          "runs": 5,
+          "defined_runs": 2,
+          "undefined_runs": 3,
+          "median": 15.992,
+          "min": 12.376,
+          "max": 19.608
+        },
+        "latency_p99_ms": {
+          "runs": 5,
+          "defined_runs": 2,
+          "undefined_runs": 3,
+          "median": 15.992,
+          "min": 12.376,
+          "max": 19.608
+        },
+        "mean_client_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0011110666666666667
+        },
+        "mean_client_timely_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0011110666666666667
+        },
+        "terminated_clients_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 8,
+          "min": 8,
+          "max": 8
+        },
+        "termination_fraction_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 1.0,
+          "min": 1.0,
+          "max": 1.0
+        },
+        "zero_delivery_clients": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 8,
+          "min": 7,
+          "max": 8
+        },
+        "objects": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 1
+        },
+        "jain_goodput": {
+          "runs": 5,
+          "defined_runs": 2,
+          "undefined_runs": 3,
+          "median": 0.125,
+          "min": 0.125,
+          "max": 0.125
+        },
+        "late_object_fraction": {
+          "runs": 5,
+          "defined_runs": 2,
+          "undefined_runs": 3,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "relay_rss_peak_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 25.078125,
+          "min": 22.171875,
+          "max": 26.609375
+        },
+        "relay_rss_median_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.9375,
+          "min": 21.140625,
+          "max": 25.296875
+        },
+        "relay_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 19.426828949941445,
+          "min": 17.904900283082647,
+          "max": 21.103473206879677
+        },
+        "measured_udp_egress_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 33.09387502175355,
+          "min": 33.074068831423695,
+          "max": 33.10665277346648
+        },
+        "publisher_actual_objects_per_second": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 30.0,
+          "min": 30.0,
+          "max": 30.0
+        },
+        "publisher_actual_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.99984,
+          "max": 3.99984
+        },
+        "publisher_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2.6114440625932906,
+          "min": 2.2634861074424726,
+          "max": 3.083334304012651
+        },
+        "subscribers_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 20.239816612269035,
+          "min": 18.79220315606136,
+          "max": 21.37934607158627
+        }
+      }
+    },
+    {
+      "total_clients": 16,
+      "stall_clients": 0,
+      "max_subgroup_age_ms": null,
+      "egress_limit_mbps": 80.0,
+      "phase": "recovery",
+      "cohort": "all",
+      "phase_seconds": 10.0,
+      "deadline_ms": 150,
+      "clients": 16,
+      "timeout_enabled": false,
+      "runs": 5,
+      "run_names": [
+        "n16-s0-t0-r1",
+        "n16-s0-t0-r2",
+        "n16-s0-t0-r3",
+        "n16-s0-t0-r4",
+        "n16-s0-t0-r5"
+      ],
+      "metrics": {
+        "latency_median_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 15.514,
+          "min": 15.4675,
+          "max": 15.852
+        },
+        "latency_p99_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.247,
+          "min": 23.123,
+          "max": 69.011
+        },
+        "mean_client_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 4.0006733,
+          "min": 3.9865072,
+          "max": 4.0023399
+        },
+        "mean_client_timely_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 4.0006733,
+          "min": 3.9815074,
+          "max": 4.0023399
+        },
+        "terminated_clients_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "termination_fraction_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "zero_delivery_clients": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "objects": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 4801,
+          "min": 4784,
+          "max": 4803
+        },
+        "jain_goodput": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.9999983094084282,
+          "min": 0.9999972222299383,
+          "max": 1.0
+        },
+        "late_object_fraction": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.001254180602006689
+        },
+        "relay_rss_peak_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 28.828125,
+          "min": 26.0,
+          "max": 29.0
+        },
+        "relay_rss_median_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 27.9375,
+          "min": 25.96875,
+          "max": 28.96875
+        },
+        "relay_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 43.8266890438181,
+          "min": 42.528999461507816,
+          "max": 46.138659623370934
+        },
+        "measured_udp_egress_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 66.08579096943014,
+          "min": 65.84960964155535,
+          "max": 66.1419575840008
+        },
+        "publisher_actual_objects_per_second": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 30.0,
+          "min": 29.9,
+          "max": 30.0
+        },
+        "publisher_actual_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.9865072,
+          "max": 3.99984
+        },
+        "publisher_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2.085839817514046,
+          "min": 1.8764131736714218,
+          "max": 2.4281298847144166
+        },
+        "subscribers_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 52.29165883319125,
+          "min": 50.66339335277517,
+          "max": 54.72602190983094
+        }
+      }
+    },
+    {
+      "total_clients": 16,
+      "stall_clients": 0,
+      "max_subgroup_age_ms": 3000,
+      "egress_limit_mbps": 80.0,
+      "phase": "recovery",
+      "cohort": "all",
+      "phase_seconds": 10.0,
+      "deadline_ms": 150,
+      "clients": 16,
+      "timeout_enabled": true,
+      "runs": 5,
+      "run_names": [
+        "n16-s0-t3000-r1",
+        "n16-s0-t3000-r2",
+        "n16-s0-t3000-r3",
+        "n16-s0-t3000-r4",
+        "n16-s0-t3000-r5"
+      ],
+      "metrics": {
+        "latency_median_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 15.604500000000002,
+          "min": 15.2355,
+          "max": 15.707
+        },
+        "latency_p99_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.332,
+          "min": 23.077,
+          "max": 25.475
+        },
+        "mean_client_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 4.0015066,
+          "min": 3.99984,
+          "max": 4.0031732
+        },
+        "mean_client_timely_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 4.0015066,
+          "min": 3.99984,
+          "max": 4.0031732
+        },
+        "terminated_clients_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "termination_fraction_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "zero_delivery_clients": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "objects": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 4802,
+          "min": 4800,
+          "max": 4804
+        },
+        "jain_goodput": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.9999979201388794,
+          "min": 0.9999951843216089,
+          "max": 0.9999987857357955
+        },
+        "late_object_fraction": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "relay_rss_peak_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 26.171875,
+          "min": 25.71875,
+          "max": 29.953125
+        },
+        "relay_rss_median_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 26.171875,
+          "min": 25.65625,
+          "max": 29.84375
+        },
+        "relay_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 43.74168210034529,
+          "min": 38.58418357556251,
+          "max": 47.35655311390303
+        },
+        "measured_udp_egress_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 66.08951383272331,
+          "min": 66.03306469909995,
+          "max": 66.14828407550534
+        },
+        "publisher_actual_objects_per_second": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 30.0,
+          "min": 30.0,
+          "max": 30.0
+        },
+        "publisher_actual_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.99984,
+          "max": 3.99984
+        },
+        "publisher_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2.3789905756805516,
+          "min": 2.352082876765072,
+          "max": 2.7583180144523602
+        },
+        "subscribers_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 53.37676298482859,
+          "min": 46.76129433625566,
+          "max": 56.3027678788111
+        }
+      }
+    },
+    {
+      "total_clients": 16,
+      "stall_clients": 8,
+      "max_subgroup_age_ms": null,
+      "egress_limit_mbps": 80.0,
+      "phase": "recovery",
+      "cohort": "all",
+      "phase_seconds": 10.0,
+      "deadline_ms": 150,
+      "clients": 16,
+      "timeout_enabled": false,
+      "runs": 5,
+      "run_names": [
+        "n16-s8-t0-r1",
+        "n16-s8-t0-r2",
+        "n16-s8-t0-r3",
+        "n16-s8-t0-r4",
+        "n16-s8-t0-r5"
+      ],
+      "metrics": {
+        "latency_median_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 11291.126,
+          "min": 11186.938,
+          "max": 11357.374
+        },
+        "latency_p99_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 14920.847,
+          "min": 14881.58,
+          "max": 14931.844
+        },
+        "mean_client_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 4.8823047,
+          "min": 4.8489727,
+          "max": 4.9073037
+        },
+        "mean_client_timely_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 1.9299228,
+          "min": 1.9015906,
+          "max": 1.9507553
+        },
+        "terminated_clients_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "termination_fraction_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "zero_delivery_clients": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "objects": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 5859,
+          "min": 5819,
+          "max": 5889
+        },
+        "jain_goodput": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.9665399241911908,
+          "min": 0.9649728104306479,
+          "max": 0.9668468797116113
+        },
+        "late_object_fraction": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.6024791985056885,
+          "min": 0.6009557945041816,
+          "max": 0.6094472017799076
+        },
+        "relay_rss_peak_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 36.921875,
+          "min": 34.546875,
+          "max": 41.234375
+        },
+        "relay_rss_median_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 33.0234375,
+          "min": 32.5546875,
+          "max": 36.5234375
+        },
+        "relay_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 58.39783755346578,
+          "min": 56.729628420933835,
+          "max": 64.43170060189263
+        },
+        "measured_udp_egress_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 79.85072165029011,
+          "min": 79.76852114538714,
+          "max": 80.00059871368332
+        },
+        "publisher_actual_objects_per_second": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 30.0,
+          "min": 30.0,
+          "max": 30.0
+        },
+        "publisher_actual_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.99984,
+          "max": 3.99984
+        },
+        "publisher_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 1.9285385129141037,
+          "min": 1.726315259286459,
+          "max": 1.950051183711858
+        },
+        "subscribers_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 60.72035848152821,
+          "min": 58.371025355193794,
+          "max": 68.88894163692994
+        }
+      }
+    },
+    {
+      "total_clients": 16,
+      "stall_clients": 8,
+      "max_subgroup_age_ms": 3000,
+      "egress_limit_mbps": 80.0,
+      "phase": "recovery",
+      "cohort": "all",
+      "phase_seconds": 10.0,
+      "deadline_ms": 150,
+      "clients": 16,
+      "timeout_enabled": true,
+      "runs": 5,
+      "run_names": [
+        "n16-s8-t3000-r1",
+        "n16-s8-t3000-r2",
+        "n16-s8-t3000-r3",
+        "n16-s8-t3000-r4",
+        "n16-s8-t3000-r5"
+      ],
+      "metrics": {
+        "latency_median_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 5.4975000000000005,
+          "min": 5.3645,
+          "max": 5.751
+        },
+        "latency_p99_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 10.931,
+          "min": 9.519,
+          "max": 16.06
+        },
+        "mean_client_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 1.99992,
+          "min": 1.99992,
+          "max": 2.0015866
+        },
+        "mean_client_timely_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 1.99992,
+          "min": 1.99992,
+          "max": 2.0015866
+        },
+        "terminated_clients_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 8,
+          "min": 8,
+          "max": 8
+        },
+        "termination_fraction_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.5,
+          "min": 0.5,
+          "max": 0.5
+        },
+        "zero_delivery_clients": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 8,
+          "min": 8,
+          "max": 8
+        },
+        "objects": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2400,
+          "min": 2400,
+          "max": 2402
+        },
+        "jain_goodput": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.5,
+          "min": 0.4999989600694397,
+          "max": 0.5
+        },
+        "late_object_fraction": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "relay_rss_peak_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.703125,
+          "min": 21.890625,
+          "max": 26.796875
+        },
+        "relay_rss_median_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.546875,
+          "min": 21.640625,
+          "max": 26.75
+        },
+        "relay_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 19.115025694808065,
+          "min": 18.7557727808846,
+          "max": 19.76733435643016
+        },
+        "measured_udp_egress_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 33.092060399732084,
+          "min": 33.01523290829768,
+          "max": 33.15733158087819
+        },
+        "publisher_actual_objects_per_second": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 30.0,
+          "min": 30.0,
+          "max": 30.0
+        },
+        "publisher_actual_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.99984,
+          "max": 3.99984
+        },
+        "publisher_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2.301570131143466,
+          "min": 2.2469360218671808,
+          "max": 2.5739140605100426
+        },
+        "subscribers_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 20.689568846971362,
+          "min": 20.601141303228196,
+          "max": 21.41332472956927
+        }
+      }
+    },
+    {
+      "total_clients": 16,
+      "stall_clients": 0,
+      "max_subgroup_age_ms": null,
+      "egress_limit_mbps": 80.0,
+      "phase": "recovery",
+      "cohort": "comparison_healthy",
+      "phase_seconds": 10.0,
+      "deadline_ms": 150,
+      "clients": 8,
+      "timeout_enabled": false,
+      "runs": 5,
+      "run_names": [
+        "n16-s0-t0-r1",
+        "n16-s0-t0-r2",
+        "n16-s0-t0-r3",
+        "n16-s0-t0-r4",
+        "n16-s0-t0-r5"
+      ],
+      "metrics": {
+        "latency_median_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 15.722,
+          "min": 15.0695,
+          "max": 16.285
+        },
+        "latency_p99_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.374,
+          "min": 23.133,
+          "max": 75.778
+        },
+        "mean_client_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 4.0015066,
+          "min": 3.9865072,
+          "max": 4.0031732
+        },
+        "mean_client_timely_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 4.0015066,
+          "min": 3.9848406,
+          "max": 4.0031732
+        },
+        "terminated_clients_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "termination_fraction_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "zero_delivery_clients": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "objects": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2401,
+          "min": 2392,
+          "max": 2402
+        },
+        "jain_goodput": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.9999987857357955,
+          "min": 0.9999979201388794,
+          "max": 1.0
+        },
+        "late_object_fraction": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0004180602006688963
+        },
+        "relay_rss_peak_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 28.828125,
+          "min": 26.0,
+          "max": 29.0
+        },
+        "relay_rss_median_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 27.9375,
+          "min": 25.96875,
+          "max": 28.96875
+        },
+        "relay_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 43.8266890438181,
+          "min": 42.528999461507816,
+          "max": 46.138659623370934
+        },
+        "measured_udp_egress_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 66.08579096943014,
+          "min": 65.84960964155535,
+          "max": 66.1419575840008
+        },
+        "publisher_actual_objects_per_second": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 30.0,
+          "min": 29.9,
+          "max": 30.0
+        },
+        "publisher_actual_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.9865072,
+          "max": 3.99984
+        },
+        "publisher_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2.085839817514046,
+          "min": 1.8764131736714218,
+          "max": 2.4281298847144166
+        },
+        "subscribers_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 52.29165883319125,
+          "min": 50.66339335277517,
+          "max": 54.72602190983094
+        }
+      }
+    },
+    {
+      "total_clients": 16,
+      "stall_clients": 0,
+      "max_subgroup_age_ms": 3000,
+      "egress_limit_mbps": 80.0,
+      "phase": "recovery",
+      "cohort": "comparison_healthy",
+      "phase_seconds": 10.0,
+      "deadline_ms": 150,
+      "clients": 8,
+      "timeout_enabled": true,
+      "runs": 5,
+      "run_names": [
+        "n16-s0-t3000-r1",
+        "n16-s0-t3000-r2",
+        "n16-s0-t3000-r3",
+        "n16-s0-t3000-r4",
+        "n16-s0-t3000-r5"
+      ],
+      "metrics": {
+        "latency_median_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 15.5405,
+          "min": 15.47,
+          "max": 16.149
+        },
+        "latency_p99_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.28,
+          "min": 23.136,
+          "max": 25.475
+        },
+        "mean_client_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 4.0031732,
+          "min": 3.99984,
+          "max": 4.006506399999999
+        },
+        "mean_client_timely_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 4.0031732,
+          "min": 3.99984,
+          "max": 4.006506399999999
+        },
+        "terminated_clients_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "termination_fraction_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "zero_delivery_clients": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "objects": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2402,
+          "min": 2400,
+          "max": 2404
+        },
+        "jain_goodput": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.9999972314660492,
+          "min": 0.9999944444753085,
+          "max": 0.9999979201388794
+        },
+        "late_object_fraction": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "relay_rss_peak_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 26.171875,
+          "min": 25.71875,
+          "max": 29.953125
+        },
+        "relay_rss_median_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 26.171875,
+          "min": 25.65625,
+          "max": 29.84375
+        },
+        "relay_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 43.74168210034529,
+          "min": 38.58418357556251,
+          "max": 47.35655311390303
+        },
+        "measured_udp_egress_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 66.08951383272331,
+          "min": 66.03306469909995,
+          "max": 66.14828407550534
+        },
+        "publisher_actual_objects_per_second": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 30.0,
+          "min": 30.0,
+          "max": 30.0
+        },
+        "publisher_actual_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.99984,
+          "max": 3.99984
+        },
+        "publisher_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2.3789905756805516,
+          "min": 2.352082876765072,
+          "max": 2.7583180144523602
+        },
+        "subscribers_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 53.37676298482859,
+          "min": 46.76129433625566,
+          "max": 56.3027678788111
+        }
+      }
+    },
+    {
+      "total_clients": 16,
+      "stall_clients": 8,
+      "max_subgroup_age_ms": null,
+      "egress_limit_mbps": 80.0,
+      "phase": "recovery",
+      "cohort": "comparison_healthy",
+      "phase_seconds": 10.0,
+      "deadline_ms": 150,
+      "clients": 8,
+      "timeout_enabled": false,
+      "runs": 5,
+      "run_names": [
+        "n16-s8-t0-r1",
+        "n16-s8-t0-r2",
+        "n16-s8-t0-r3",
+        "n16-s8-t0-r4",
+        "n16-s8-t0-r5"
+      ],
+      "metrics": {
+        "latency_median_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 45.367,
+          "min": 44.251,
+          "max": 49.053
+        },
+        "latency_p99_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 189.617,
+          "min": 175.416,
+          "max": 206.173
+        },
+        "mean_client_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.9881738,
+          "min": 3.9781742,
+          "max": 3.99984
+        },
+        "mean_client_timely_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.8598456,
+          "min": 3.8031812,
+          "max": 3.9015106
+        },
+        "terminated_clients_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "termination_fraction_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "zero_delivery_clients": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "objects": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2393,
+          "min": 2387,
+          "max": 2400
+        },
+        "jain_goodput": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.9999889431629435,
+          "min": 0.9999639737854465,
+          "max": 0.9999944444753085
+        },
+        "late_object_fraction": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.02974444909928781,
+          "min": 0.022983702465524447,
+          "max": 0.04558762024257633
+        },
+        "relay_rss_peak_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 36.921875,
+          "min": 34.546875,
+          "max": 41.234375
+        },
+        "relay_rss_median_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 33.0234375,
+          "min": 32.5546875,
+          "max": 36.5234375
+        },
+        "relay_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 58.39783755346578,
+          "min": 56.729628420933835,
+          "max": 64.43170060189263
+        },
+        "measured_udp_egress_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 79.85072165029011,
+          "min": 79.76852114538714,
+          "max": 80.00059871368332
+        },
+        "publisher_actual_objects_per_second": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 30.0,
+          "min": 30.0,
+          "max": 30.0
+        },
+        "publisher_actual_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.99984,
+          "max": 3.99984
+        },
+        "publisher_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 1.9285385129141037,
+          "min": 1.726315259286459,
+          "max": 1.950051183711858
+        },
+        "subscribers_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 60.72035848152821,
+          "min": 58.371025355193794,
+          "max": 68.88894163692994
+        }
+      }
+    },
+    {
+      "total_clients": 16,
+      "stall_clients": 8,
+      "max_subgroup_age_ms": 3000,
+      "egress_limit_mbps": 80.0,
+      "phase": "recovery",
+      "cohort": "comparison_healthy",
+      "phase_seconds": 10.0,
+      "deadline_ms": 150,
+      "clients": 8,
+      "timeout_enabled": true,
+      "runs": 5,
+      "run_names": [
+        "n16-s8-t3000-r1",
+        "n16-s8-t3000-r2",
+        "n16-s8-t3000-r3",
+        "n16-s8-t3000-r4",
+        "n16-s8-t3000-r5"
+      ],
+      "metrics": {
+        "latency_median_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 5.4975000000000005,
+          "min": 5.3645,
+          "max": 5.751
+        },
+        "latency_p99_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 10.931,
+          "min": 9.519,
+          "max": 16.06
+        },
+        "mean_client_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.99984,
+          "max": 4.0031732
+        },
+        "mean_client_timely_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.99984,
+          "max": 4.0031732
+        },
+        "terminated_clients_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "termination_fraction_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "zero_delivery_clients": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "objects": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2400,
+          "min": 2400,
+          "max": 2402
+        },
+        "jain_goodput": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 1.0,
+          "min": 0.9999979201388794,
+          "max": 1.0
+        },
+        "late_object_fraction": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "relay_rss_peak_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.703125,
+          "min": 21.890625,
+          "max": 26.796875
+        },
+        "relay_rss_median_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.546875,
+          "min": 21.640625,
+          "max": 26.75
+        },
+        "relay_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 19.115025694808065,
+          "min": 18.7557727808846,
+          "max": 19.76733435643016
+        },
+        "measured_udp_egress_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 33.092060399732084,
+          "min": 33.01523290829768,
+          "max": 33.15733158087819
+        },
+        "publisher_actual_objects_per_second": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 30.0,
+          "min": 30.0,
+          "max": 30.0
+        },
+        "publisher_actual_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.99984,
+          "max": 3.99984
+        },
+        "publisher_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2.301570131143466,
+          "min": 2.2469360218671808,
+          "max": 2.5739140605100426
+        },
+        "subscribers_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 20.689568846971362,
+          "min": 20.601141303228196,
+          "max": 21.41332472956927
+        }
+      }
+    },
+    {
+      "total_clients": 16,
+      "stall_clients": 8,
+      "max_subgroup_age_ms": null,
+      "egress_limit_mbps": 80.0,
+      "phase": "recovery",
+      "cohort": "stalled",
+      "phase_seconds": 10.0,
+      "deadline_ms": 150,
+      "clients": 8,
+      "timeout_enabled": false,
+      "runs": 5,
+      "run_names": [
+        "n16-s8-t0-r1",
+        "n16-s8-t0-r2",
+        "n16-s8-t0-r3",
+        "n16-s8-t0-r4",
+        "n16-s8-t0-r5"
+      ],
+      "metrics": {
+        "latency_median_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 12800.733,
+          "min": 12757.008,
+          "max": 12908.108
+        },
+        "latency_p99_ms": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 14944.413,
+          "min": 14920.224,
+          "max": 14956.836
+        },
+        "mean_client_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 5.7764356,
+          "min": 5.7197712,
+          "max": 5.8147674
+        },
+        "mean_client_timely_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "terminated_clients_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "termination_fraction_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "zero_delivery_clients": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "objects": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3466,
+          "min": 3432,
+          "max": 3489
+        },
+        "jain_goodput": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.9976571228021294,
+          "min": 0.9960774311834106,
+          "max": 0.9988877609429729
+        },
+        "late_object_fraction": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 1.0,
+          "min": 1.0,
+          "max": 1.0
+        },
+        "relay_rss_peak_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 36.921875,
+          "min": 34.546875,
+          "max": 41.234375
+        },
+        "relay_rss_median_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 33.0234375,
+          "min": 32.5546875,
+          "max": 36.5234375
+        },
+        "relay_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 58.39783755346578,
+          "min": 56.729628420933835,
+          "max": 64.43170060189263
+        },
+        "measured_udp_egress_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 79.85072165029011,
+          "min": 79.76852114538714,
+          "max": 80.00059871368332
+        },
+        "publisher_actual_objects_per_second": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 30.0,
+          "min": 30.0,
+          "max": 30.0
+        },
+        "publisher_actual_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.99984,
+          "max": 3.99984
+        },
+        "publisher_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 1.9285385129141037,
+          "min": 1.726315259286459,
+          "max": 1.950051183711858
+        },
+        "subscribers_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 60.72035848152821,
+          "min": 58.371025355193794,
+          "max": 68.88894163692994
+        }
+      }
+    },
+    {
+      "total_clients": 16,
+      "stall_clients": 8,
+      "max_subgroup_age_ms": 3000,
+      "egress_limit_mbps": 80.0,
+      "phase": "recovery",
+      "cohort": "stalled",
+      "phase_seconds": 10.0,
+      "deadline_ms": 150,
+      "clients": 8,
+      "timeout_enabled": true,
+      "runs": 5,
+      "run_names": [
+        "n16-s8-t3000-r1",
+        "n16-s8-t3000-r2",
+        "n16-s8-t3000-r3",
+        "n16-s8-t3000-r4",
+        "n16-s8-t3000-r5"
+      ],
+      "metrics": {
+        "latency_median_ms": {
+          "runs": 5,
+          "defined_runs": 0,
+          "undefined_runs": 5,
+          "median": null,
+          "min": null,
+          "max": null
+        },
+        "latency_p99_ms": {
+          "runs": 5,
+          "defined_runs": 0,
+          "undefined_runs": 5,
+          "median": null,
+          "min": null,
+          "max": null
+        },
+        "mean_client_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "mean_client_timely_goodput_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "terminated_clients_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 8,
+          "min": 8,
+          "max": 8
+        },
+        "termination_fraction_total": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 1.0,
+          "min": 1.0,
+          "max": 1.0
+        },
+        "zero_delivery_clients": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 8,
+          "min": 8,
+          "max": 8
+        },
+        "objects": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "jain_goodput": {
+          "runs": 5,
+          "defined_runs": 0,
+          "undefined_runs": 5,
+          "median": null,
+          "min": null,
+          "max": null
+        },
+        "late_object_fraction": {
+          "runs": 5,
+          "defined_runs": 0,
+          "undefined_runs": 5,
+          "median": null,
+          "min": null,
+          "max": null
+        },
+        "relay_rss_peak_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.703125,
+          "min": 21.890625,
+          "max": 26.796875
+        },
+        "relay_rss_median_mib": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 23.546875,
+          "min": 21.640625,
+          "max": 26.75
+        },
+        "relay_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 19.115025694808065,
+          "min": 18.7557727808846,
+          "max": 19.76733435643016
+        },
+        "measured_udp_egress_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 33.092060399732084,
+          "min": 33.01523290829768,
+          "max": 33.15733158087819
+        },
+        "publisher_actual_objects_per_second": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 30.0,
+          "min": 30.0,
+          "max": 30.0
+        },
+        "publisher_actual_mbps": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 3.99984,
+          "min": 3.99984,
+          "max": 3.99984
+        },
+        "publisher_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 2.301570131143466,
+          "min": 2.2469360218671808,
+          "max": 2.5739140605100426
+        },
+        "subscribers_cpu_percent_one_core": {
+          "runs": 5,
+          "defined_runs": 5,
+          "undefined_runs": 0,
+          "median": 20.689568846971362,
+          "min": 20.601141303228196,
+          "max": 21.41332472956927
+        }
+      }
+    }
+  ]
+}

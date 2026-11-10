@@ -1,0 +1,147 @@
+{
+  "schema_version": 1,
+  "status": "complete",
+  "created_utc": "20261110T183954.267880Z",
+  "config": {
+    "clients": 16,
+    "stall_clients": 0,
+    "duration": 30.0,
+    "stall_after": 5.0,
+    "stall_for": 15.0,
+    "bitrate": 4000000,
+    "fps": 30,
+    "group_frames": 30,
+    "receive_window": 65536,
+    "stream_receive_window": 32768,
+    "max_uni_streams": 1,
+    "relay_binary": "/private/tmp/moqt-authoring-20261110/.local/relay-variants/c146283dadfe3324/moq-relay-ietf",
+    "variant_build_manifest": "/private/tmp/moqt-authoring-20261110/.local/relay-variants/c146283dadfe3324/build.json",
+    "egress_mbps": 80.0,
+    "egress_burst_bytes": 65536,
+    "max_subgroup_age_ms": null,
+    "allow_policy_termination": true,
+    "label": "n16-s0-t0-r3",
+    "out": "/private/tmp/moqt-authoring-20261110/results/local-policy-20261110-validated/n16-s0-t0-r3"
+  },
+  "commands": {
+    "relay": [
+      "/private/tmp/moqt-authoring-20261110/.local/relay-variants/c146283dadfe3324/moq-relay-ietf",
+      "--bind",
+      "127.0.0.1:51217",
+      "--tls-cert",
+      "/private/tmp/moqt-authoring-20261110/.local/certs/20261110T183954.267880Z/cert.pem",
+      "--tls-key",
+      "/private/tmp/moqt-authoring-20261110/.local/certs/20261110T183954.267880Z/key.pem",
+      "--metrics-addr",
+      "127.0.0.1:52580",
+      "--coordinator-file",
+      "/private/tmp/moqt-authoring-20261110/results/local-policy-20261110-validated/n16-s0-t0-r3/coordinator.json",
+      "--egress-mbps",
+      "80.0",
+      "--egress-burst-bytes",
+      "65536"
+    ],
+    "publisher": [
+      "/private/tmp/moqt-authoring-20261110/target/release/moqt-load",
+      "publish",
+      "--relay",
+      "moqt://127.0.0.1:51217",
+      "--tls-root",
+      "/private/tmp/moqt-authoring-20261110/.local/certs/20261110T183954.267880Z/cert.pem",
+      "--namespace",
+      "local-20261110T183954.267880Z",
+      "--duration",
+      "50.0",
+      "--bitrate",
+      "4000000",
+      "--fps",
+      "30",
+      "--group-frames",
+      "30"
+    ],
+    "subscribers": [
+      "/private/tmp/moqt-authoring-20261110/target/release/moqt-load",
+      "subscribe",
+      "--relay",
+      "moqt://127.0.0.1:51217",
+      "--tls-root",
+      "/private/tmp/moqt-authoring-20261110/.local/certs/20261110T183954.267880Z/cert.pem",
+      "--namespace",
+      "local-20261110T183954.267880Z",
+      "--duration",
+      "30.0",
+      "--clients",
+      "16",
+      "--client-offset",
+      "0",
+      "--stall-clients",
+      "0",
+      "--stall-after",
+      "5.0",
+      "--stall-for",
+      "15.0",
+      "--receive-window",
+      "65536",
+      "--stream-receive-window",
+      "32768",
+      "--max-uni-streams",
+      "1",
+      "--allow-policy-termination"
+    ]
+  },
+  "git_commit": "01d2309a1bbdd8092535c0ab9a83f04718e4b00c",
+  "git_status": "",
+  "upstream_commit": "3b2b584b47e4a18f3a6bf48dc9a665c736743443",
+  "upstream_status": "",
+  "host": {
+    "platform": "macOS-15.3.1-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "logical_cpus": 10,
+    "cpu_model": "Apple M2 Pro",
+    "memory_bytes": 17179869184
+  },
+  "binary_sha256": {
+    "relay": "20c922644aa31aad762458a53166342ba4465e5a189cb9581d4743dad0c86c94",
+    "load": "3f54420bcabf0594a47ccf30a7ecfe1e98cdc4a4698fd045ac6b5fcb91b15aaf"
+  },
+  "clock": "publisher and subscribers share one host wall clock",
+  "sampling_interval_seconds": 0.25,
+  "environment": {
+    "RUST_LOG": "warn",
+    "TOKIO_WORKER_THREADS": "4"
+  },
+  "variant_build": {
+    "base_revision": "3b2b584b47e4a18f3a6bf48dc9a665c736743443",
+    "patch_sha256": "c146283dadfe33241302f0f07417010fcb6e64e18d3c8fd5ca787ceb2f49de3e",
+    "patch": "/private/tmp/moqt-authoring-20261110/patches/0001-egress-cap-and-subgroup-timeout.patch",
+    "binary": "/private/tmp/moqt-authoring-20261110/.local/relay-variants/c146283dadfe3324/moq-relay-ietf",
+    "binary_sha256": "20c922644aa31aad762458a53166342ba4465e5a189cb9581d4743dad0c86c94",
+    "build_command": [
+      "cargo",
+      "+1.90.0",
+      "build",
+      "--release",
+      "--locked",
+      "-p",
+      "moq-relay-ietf",
+      "--features",
+      "metrics-prometheus"
+    ],
+    "rustc": "rustc 1.90.0 (1159e78c4 2025-09-14)"
+  },
+  "observed_exit_codes": {
+    "relay": null,
+    "publisher": null,
+    "subscribers": 0
+  },
+  "intentional_cleanup": [
+    "relay",
+    "publisher"
+  ],
+  "final_exit_codes": {
+    "relay": -15,
+    "publisher": -15,
+    "subscribers": 0
+  },
+  "finished_unix_us": 1794336025858862
+}
