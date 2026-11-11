@@ -30,15 +30,15 @@ Finally, a slow application reader does not automatically create backpressure at
 
 ## 4. Methodology
 
-We implemented the two controls from Report I in the same relay. DRR decides which session can hand media bytes to QUIC next. Fixed payload budgets decide how much media a session, and the shared store as a whole, can retain. We evaluate them separately below: first by creating bandwidth contention with a multi-track client, then by making one subscriber stall while the others continue receiving.
+We implemented the two controls from Report I in the same relay. DRR decides which session can hand media bytes to QUIC next. Fixed payload budgets decide how much media a session, and the shared store as a whole, can retain. We evaluated them separately below: first by creating bandwidth contention with a multi-track client, then by making one subscriber stall while the others continue receiving.
 
 ### Experimental platform and workload
 
-We built the testbed around Cloudflare's moq-rs relay, pinned at MoQT draft-16 revision 3b2b584. It has three processes: a publisher, the relay, and a generator that opens independent subscriber connections. We began on one machine so we could debug the implementation and repeat experiments before moving to PACE. The local configuration is shown below.
+We built our testbed around Cloudflare's moq-rs relay, pinned at MoQT draft-16 revision 3b2b584. It has three processes: a publisher, the relay, and a generator that opens independent subscriber connections. We began on one machine so we could debug the implementation and repeat experiments before moving to PACE. The local configuration is shown in the table below.
 
 The publisher generates synthetic media Objects, which are the units of data carried by MoQT. Each Object contains a sequence number, a generation timestamp, and a payload the receiver can verify. Each track sends 30 Objects per second at about 4 Mbit/s. Every second starts a new group; in this workload, each group is sent on one QUIC stream, called a subgroup stream. The multi-track workload uses the same source pattern on four tracks.
 
-This continuous one-to-many workload lets us control the source rate and measure both complete delivery and how old the data is when it arrives. A speed test alone would not show whether a client is receiving useful live data or old backlog. Encoded-video replay, including Big Buck Bunny from Report I, remains a later experiment.
+This continuous one-to-many workload lets us control the source rate and measure both complete delivery and how old the data is when it arrives. A speed test alone would not show whether a client is receiving useful live data or old backlog. Encoded-video replay, including Big Buck Bunny from Report I, remains as a later experiment.
 
 | Setting | Local platform and workload |
 | --- | --- |
