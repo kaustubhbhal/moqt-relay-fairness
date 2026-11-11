@@ -1,0 +1,12 @@
+{"timestamp_unix_us": 1794362254703219, "role": "relay", "pid": 98062, "rss_bytes": 1245184, "cpu_seconds": 0.0}
+{"timestamp_unix_us": 1794362255918737, "role": "relay", "pid": 98062, "rss_bytes": 19988480, "cpu_seconds": 0.39}
+{"timestamp_unix_us": 1794362256928006, "role": "relay", "pid": 98062, "rss_bytes": 23281664, "cpu_seconds": 0.57}
+{"timestamp_unix_us": 1794362257941443, "role": "relay", "pid": 98062, "rss_bytes": 26427392, "cpu_seconds": 0.81}
+{"timestamp_unix_us": 1794362258955775, "role": "relay", "pid": 98062, "rss_bytes": 29556736, "cpu_seconds": 1.02}
+{"timestamp_unix_us": 1794362259968700, "role": "relay", "pid": 98062, "rss_bytes": 32997376, "cpu_seconds": 1.25}
+{"timestamp_unix_us": 1794362260982024, "role": "relay", "pid": 98062, "rss_bytes": 35586048, "cpu_seconds": 1.5}
+{"timestamp_unix_us": 1794362261993425, "role": "relay", "pid": 98062, "rss_bytes": 38731776, "cpu_seconds": 1.72}
+{"timestamp_unix_us": 1794362263007124, "role": "relay", "pid": 98062, "rss_bytes": 33013760, "cpu_seconds": 1.89}
+{"timestamp_unix_us": 1794362264019736, "role": "relay", "pid": 98062, "rss_bytes": 34570240, "cpu_seconds": 2.12}
+{"timestamp_unix_us": 1794362265031279, "role": "relay", "pid": 98062, "rss_bytes": 38699008, "cpu_seconds": 2.31}
+{"timestamp_unix_us": 1794362266042564, "role": "relay", "pid": 98062, "rss_bytes": 47005696, "cpu_seconds": 2.43}

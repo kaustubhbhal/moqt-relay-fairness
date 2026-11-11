@@ -1,0 +1,26 @@
+{
+  "base_revision": "3b2b584b47e4a18f3a6bf48dc9a665c736743443",
+  "patch_sha256": "86c3e297565ee155b05bc8b02b2799806b07c3b75b61377089c8ac6eefdc1da1",
+  "patch": "/private/tmp/moqt-authoring-20261110/patches/0003-session-isolation.patch",
+  "binary": "/private/tmp/moqt-authoring-20261110/.local/relay-variants/86c3e297565ee155/moq-relay-ietf",
+  "binary_sha256": "085f6f1f0902dd70b1a9bb613ccee54f7240bfc4059228c0de170b7b509d06b3",
+  "build_command": [
+    "cargo",
+    "+1.90.0",
+    "build",
+    "--release",
+    "--locked",
+    "-p",
+    "moq-relay-ietf",
+    "--features",
+    "metrics-prometheus"
+  ],
+  "rustc": "rustc 1.90.0 (1159e78c4 2025-09-14)",
+  "client_binary": "/private/tmp/moqt-authoring-20261110/.local/relay-variants/86c3e297565ee155/clients/eb64932868054ba1/moqt-load",
+  "client_binary_sha256": "addf98e90baf2ed694619efb8dacaba184f0ee4fee6c6d50acc7de520993d5e4",
+  "client_source_sha256": "eb64932868054ba195f753f401354a3310f8b1e147369720a0da5690230100d4",
+  "client_features": [
+    "live-resync"
+  ],
+  "manifest_path": "/private/tmp/moqt-authoring-20261110/.local/relay-variants/86c3e297565ee155/clients/eb64932868054ba1/build.json"
+}

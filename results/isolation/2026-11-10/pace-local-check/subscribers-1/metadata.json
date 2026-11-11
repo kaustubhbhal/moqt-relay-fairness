@@ -1,0 +1,115 @@
+{
+  "role": "subscribers-1",
+  "rank": 3,
+  "hostname": "Kaustubhs-MacBook-Pro-3.local",
+  "platform": "macOS-15.3.1-arm64-arm-64bit-Mach-O",
+  "python": "3.14.6",
+  "environment": {
+    "RUST_LOG": "warn",
+    "TOKIO_WORKER_THREADS": "4"
+  },
+  "process_sampling_interval_seconds": 1,
+  "slurm": {
+    "SLURM_PROCID": "3",
+    "SLURM_JOB_ID": "local-smoke"
+  },
+  "configuration": {
+    "clients": 4,
+    "stall_clients": 0,
+    "duration": 10.0,
+    "stall_after": 2.0,
+    "stall_for": 3.0,
+    "application_mbps": 12.0,
+    "scheduler": "drr",
+    "max_group_bytes": 524288,
+    "bitrate": 4000000,
+    "fps": 30,
+    "group_frames": 30,
+    "tracks": 4,
+    "extra_track_clients": 1,
+    "receive_window": 8388608,
+    "stream_receive_window": 2097152,
+    "max_uni_streams": 64,
+    "track_bitrates": [],
+    "track_priorities": [],
+    "allow_policy_termination": false
+  },
+  "binaries": {
+    "relay_binary": "/private/tmp/moqt-authoring-20261110/.local/relay-variants/86c3e297565ee155/moq-relay-ietf",
+    "load_binary": "/private/tmp/moqt-authoring-20261110/.local/relay-variants/86c3e297565ee155/clients/eb64932868054ba1/moqt-load",
+    "binary_sha256": {
+      "relay": "085f6f1f0902dd70b1a9bb613ccee54f7240bfc4059228c0de170b7b509d06b3",
+      "load": "addf98e90baf2ed694619efb8dacaba184f0ee4fee6c6d50acc7de520993d5e4"
+    },
+    "build_manifest_path": "/private/tmp/moqt-authoring-20261110/.local/relay-variants/86c3e297565ee155/clients/eb64932868054ba1/build.json",
+    "build_manifest": {
+      "base_revision": "3b2b584b47e4a18f3a6bf48dc9a665c736743443",
+      "patch_sha256": "86c3e297565ee155b05bc8b02b2799806b07c3b75b61377089c8ac6eefdc1da1",
+      "patch": "/private/tmp/moqt-authoring-20261110/patches/0003-session-isolation.patch",
+      "binary": "/private/tmp/moqt-authoring-20261110/.local/relay-variants/86c3e297565ee155/moq-relay-ietf",
+      "binary_sha256": "085f6f1f0902dd70b1a9bb613ccee54f7240bfc4059228c0de170b7b509d06b3",
+      "build_command": [
+        "cargo",
+        "+1.90.0",
+        "build",
+        "--release",
+        "--locked",
+        "-p",
+        "moq-relay-ietf",
+        "--features",
+        "metrics-prometheus"
+      ],
+      "rustc": "rustc 1.90.0 (1159e78c4 2025-09-14)",
+      "client_binary": "/private/tmp/moqt-authoring-20261110/.local/relay-variants/86c3e297565ee155/clients/eb64932868054ba1/moqt-load",
+      "client_binary_sha256": "addf98e90baf2ed694619efb8dacaba184f0ee4fee6c6d50acc7de520993d5e4",
+      "client_source_sha256": "eb64932868054ba195f753f401354a3310f8b1e147369720a0da5690230100d4",
+      "client_features": [
+        "live-resync"
+      ],
+      "manifest_path": "/private/tmp/moqt-authoring-20261110/.local/relay-variants/86c3e297565ee155/clients/eb64932868054ba1/build.json"
+    }
+  },
+  "relay_policy_flags": [
+    "--application-mbps",
+    "12.0",
+    "--scheduler",
+    "drr",
+    "--max-group-bytes",
+    "524288"
+  ],
+  "cpu": {
+    "command": [
+      "lscpu"
+    ],
+    "error": "[Errno 2] No such file or directory: 'lscpu'"
+  },
+  "memory": {
+    "command": [
+      "free",
+      "-b"
+    ],
+    "error": "[Errno 2] No such file or directory: 'free'"
+  },
+  "interfaces": {
+    "command": [
+      "ip",
+      "-brief",
+      "address"
+    ],
+    "error": "[Errno 2] No such file or directory: 'ip'"
+  },
+  "routes": {
+    "command": [
+      "ip",
+      "route"
+    ],
+    "error": "[Errno 2] No such file or directory: 'ip'"
+  },
+  "clock": {
+    "command": [
+      "chronyc",
+      "tracking"
+    ],
+    "error": "[Errno 2] No such file or directory: 'chronyc'"
+  }
+}

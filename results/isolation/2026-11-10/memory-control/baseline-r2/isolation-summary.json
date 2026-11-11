@@ -1,0 +1,134 @@
+{
+  "clients": [
+    {
+      "client": 0,
+      "cohort": "healthy",
+      "tracks": 1,
+      "payload_bytes": 5999760,
+      "throughput_mbps": 3.99984,
+      "timely_mbps": 3.99984,
+      "p99_latency_ms": 9.525,
+      "objects": 360,
+      "track_payload_bytes": {
+        "video": 5999760
+      },
+      "terminated_subscriptions": 0,
+      "connection_id": 5662459920
+    },
+    {
+      "client": 1,
+      "cohort": "healthy",
+      "tracks": 1,
+      "payload_bytes": 5999760,
+      "throughput_mbps": 3.99984,
+      "timely_mbps": 3.99984,
+      "p99_latency_ms": 9.003,
+      "objects": 360,
+      "track_payload_bytes": {
+        "video": 5999760
+      },
+      "terminated_subscriptions": 0,
+      "connection_id": 5637295120
+    },
+    {
+      "client": 2,
+      "cohort": "healthy",
+      "tracks": 1,
+      "payload_bytes": 5999760,
+      "throughput_mbps": 3.99984,
+      "timely_mbps": 3.99984,
+      "p99_latency_ms": 9.26,
+      "objects": 360,
+      "track_payload_bytes": {
+        "video": 5999760
+      },
+      "terminated_subscriptions": 0,
+      "connection_id": 5637342736
+    },
+    {
+      "client": 3,
+      "cohort": "healthy",
+      "tracks": 1,
+      "payload_bytes": 5999760,
+      "throughput_mbps": 3.99984,
+      "timely_mbps": 3.99984,
+      "p99_latency_ms": 9.583,
+      "objects": 360,
+      "track_payload_bytes": {
+        "video": 5999760
+      },
+      "terminated_subscriptions": 0,
+      "connection_id": 5637385744
+    }
+  ],
+  "jain_session_throughput": 1.0,
+  "aggregate_throughput_mbps": 15.99936,
+  "healthy_mean_mbps": 3.99984,
+  "healthy_mean_timely_mbps": 3.99984,
+  "terminated_subscriptions": 0,
+  "window_seconds": 12.0,
+  "warmup_seconds": 3,
+  "publisher_objects_per_second": {
+    "video": 29.996932813619807
+  },
+  "peak_relay_rss_bytes": 24133632,
+  "resource_metric_maxima": {
+    "moq_relay_scheduled_bytes_total{session=\"57e31d15f64e292ecdd46b57bdf4bef7b461c0d5\"}": 7035659.0,
+    "moq_relay_scheduled_bytes_total{session=\"0a4d1cc423835599c859510d743d13d453edd1f1\"}": 7050843.0,
+    "moq_relay_scheduled_bytes_total{session=\"bec3ec68f73b8aa108e9e4f58ceffb5d75de8eeb\"}": 7037995.0,
+    "moq_relay_scheduled_bytes_total{session=\"1f37ccfd34ed5d8a2709f646284e0b397997b472\"}": 7035659.0,
+    "moq_relay_session_reserved_bytes{session=\"1f37ccfd34ed5d8a2709f646284e0b397997b472\"}": 1048576.0,
+    "moq_relay_session_reserved_bytes{session=\"2ea311f757e36b7703b231c933fdc0d0601840e5\"}": 0.0,
+    "moq_relay_session_reserved_bytes{session=\"0a4d1cc423835599c859510d743d13d453edd1f1\"}": 1048576.0,
+    "moq_relay_session_reserved_bytes{session=\"bec3ec68f73b8aa108e9e4f58ceffb5d75de8eeb\"}": 1048576.0,
+    "moq_relay_session_reserved_bytes{session=\"57e31d15f64e292ecdd46b57bdf4bef7b461c0d5\"}": 1048576.0,
+    "moq_relay_global_admission_rejections": 0.0,
+    "moq_relay_session_peak_reserved_bytes{session=\"2ea311f757e36b7703b231c933fdc0d0601840e5\"}": 0.0,
+    "moq_relay_session_peak_reserved_bytes{session=\"57e31d15f64e292ecdd46b57bdf4bef7b461c0d5\"}": 1572864.0,
+    "moq_relay_session_peak_reserved_bytes{session=\"bec3ec68f73b8aa108e9e4f58ceffb5d75de8eeb\"}": 1572864.0,
+    "moq_relay_session_peak_reserved_bytes{session=\"0a4d1cc423835599c859510d743d13d453edd1f1\"}": 1572864.0,
+    "moq_relay_session_peak_reserved_bytes{session=\"1f37ccfd34ed5d8a2709f646284e0b397997b472\"}": 1572864.0,
+    "moq_relay_global_peak_reserved_bytes": 1048576.0,
+    "moq_relay_session_budget_rejections{session=\"0a4d1cc423835599c859510d743d13d453edd1f1\"}": 0.0,
+    "moq_relay_session_budget_rejections{session=\"1f37ccfd34ed5d8a2709f646284e0b397997b472\"}": 0.0,
+    "moq_relay_session_budget_rejections{session=\"bec3ec68f73b8aa108e9e4f58ceffb5d75de8eeb\"}": 0.0,
+    "moq_relay_session_budget_rejections{session=\"2ea311f757e36b7703b231c933fdc0d0601840e5\"}": 0.0,
+    "moq_relay_session_budget_rejections{session=\"57e31d15f64e292ecdd46b57bdf4bef7b461c0d5\"}": 0.0,
+    "moq_relay_global_reserved_bytes": 524288.0
+  },
+  "run_directory": "results/isolation/2026-11-10/memory-control/baseline-r2",
+  "config": {
+    "clients": 4,
+    "stall_clients": 0,
+    "duration": 15.0,
+    "stall_after": 3.0,
+    "stall_for": 6.0,
+    "bitrate": 4000000,
+    "fps": 30,
+    "group_frames": 30,
+    "tracks": 1,
+    "extra_track_clients": 0,
+    "track_bitrates": null,
+    "track_priorities": null,
+    "application_mbps": 64.0,
+    "scheduler": "fifo",
+    "session_buffer_bytes": 0,
+    "global_buffer_bytes": 8388608,
+    "max_group_bytes": 524288,
+    "receive_window": 65536,
+    "stream_receive_window": 32768,
+    "max_uni_streams": 1,
+    "relay_binary": "/private/tmp/moqt-authoring-20261110/.local/relay-variants/86c3e297565ee155/moq-relay-ietf",
+    "load_binary": "/private/tmp/moqt-authoring-20261110/.local/relay-variants/86c3e297565ee155/clients/eb64932868054ba1/moqt-load",
+    "variant_build_manifest": "/private/tmp/moqt-authoring-20261110/.local/relay-variants/86c3e297565ee155/clients/eb64932868054ba1/build.json",
+    "egress_mbps": null,
+    "egress_burst_bytes": 65536,
+    "max_subgroup_age_ms": null,
+    "subgroup_timeout_action": null,
+    "delivery_timeout_ms": null,
+    "allow_subgroup_reset": false,
+    "allow_policy_termination": true,
+    "label": "isolation-memory-baseline",
+    "out": "/private/tmp/moqt-authoring-20261110/results/isolation/2026-11-10/memory-control/baseline-r2"
+  }
+}

@@ -1,0 +1,10 @@
+{"timestamp_unix_us": 1794362255517200, "role": "subscribers-1", "pid": 98067, "rss_bytes": 2736128, "cpu_seconds": 0.0}
+{"timestamp_unix_us": 1794362256540608, "role": "subscribers-1", "pid": 98067, "rss_bytes": 9863168, "cpu_seconds": 0.03}
+{"timestamp_unix_us": 1794362257577395, "role": "subscribers-1", "pid": 98067, "rss_bytes": 11141120, "cpu_seconds": 0.08}
+{"timestamp_unix_us": 1794362258598335, "role": "subscribers-1", "pid": 98067, "rss_bytes": 12353536, "cpu_seconds": 0.14}
+{"timestamp_unix_us": 1794362259624008, "role": "subscribers-1", "pid": 98067, "rss_bytes": 13402112, "cpu_seconds": 0.19}
+{"timestamp_unix_us": 1794362260650138, "role": "subscribers-1", "pid": 98067, "rss_bytes": 13500416, "cpu_seconds": 0.26}
+{"timestamp_unix_us": 1794362261674049, "role": "subscribers-1", "pid": 98067, "rss_bytes": 14041088, "cpu_seconds": 0.32}
+{"timestamp_unix_us": 1794362262700172, "role": "subscribers-1", "pid": 98067, "rss_bytes": 12566528, "cpu_seconds": 0.37}
+{"timestamp_unix_us": 1794362263734011, "role": "subscribers-1", "pid": 98067, "rss_bytes": 12877824, "cpu_seconds": 0.42}
+{"timestamp_unix_us": 1794362264756484, "role": "subscribers-1", "pid": 98067, "rss_bytes": 13631488, "cpu_seconds": 0.47}

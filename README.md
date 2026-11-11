@@ -4,7 +4,7 @@ The current implementation adds **per-session DRR and fixed retained-payload bud
 
 CS 4251 Group 16's experiment setup for studying how stalled subscribers affect a Media over QUIC relay.
 
-The first milestone measures the existing relay. The second adds a shared UDP egress cap and an optional fixed subscription timeout. The third skips expired media streams so stalled clients can return to live on the same subscription. DRR and adaptive resource budgets are not implemented yet. We use actual QUIC connections and synthetic, paced media objects; these are transport experiments, not video playback tests.
+The first milestone measures the existing relay. The second adds a shared UDP egress cap and an optional fixed subscription timeout. The third skips expired media streams so stalled clients can return to live on the same subscription. The fourth milestone implements per-session DRR and fixed payload reservation budgets; adaptive budgets remain future work. We use actual QUIC connections and synthetic, paced media objects; these are transport experiments, not video playback tests.
 
 Cloudflare's relay is pinned to draft-16 revision `3b2b584b47e4a18f3a6bf48dc9a665c736743443` under `vendor/moq-rs`. Keeping the version fixed makes repeated experiments comparable with our submitted report. Initialize it with `git submodule update --init --recursive` after cloning.
 
@@ -84,4 +84,4 @@ To regenerate the report PDF and figures, install the optional `requirements-rep
 - `vendor/moq-rs`: unchanged, pinned upstream source.
 - `results/`: raw experiments and selected evidence; generated local/ICE runs are ignored by default.
 
-The shared egress cap, fixed forwarding timeout, and same-subscription recovery are implemented as isolated patches. Session scheduling and adaptive backlog limits remain next steps. Neither DRR nor the adaptive policy is implemented here yet.
+The shared egress cap, fixed forwarding timeout, and same-subscription recovery are implemented as isolated patches. The cumulative third patch adds session DRR and fixed retained-payload budgets. Adaptive limits remain a later step.

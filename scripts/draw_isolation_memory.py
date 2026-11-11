@@ -19,7 +19,7 @@ box(4.3,4.25,5.4,1.9,'Shared payload store — relay-wide','One stored payload c
 arrow((3.8,5.15),(4.2,5.15))
 box(.1,1.95,5.2,1.8,'Application references — per session','Each subscribed track reserves one cache slot.\nEach active forwarding task reserves another slot.\nAll tracks share a 2 MiB session reservation cap.\nOverflow ends the affected subscription.','#e4f3ec')
 box(5.9,1.95,3.8,1.8,'QUIC buffers — per connection','Bytes waiting to be sent or ACKed.\n10 MB outstanding-stream window\n(separate transport accounting).\nNot covered by our payload cap.','#fff0dc')
-arrow((5.9,4.15),(3.1,3.85));ax.text(3.65,3.98,'shared references',fontsize=9.5,color='#45566a')
+arrow((5.9,4.15),(3.1,3.85));ax.text(4.8,3.98,'shared references',fontsize=9.5,color='#45566a',bbox={'facecolor':'white','edgecolor':'none','pad':1})
 arrow((5.4,2.85),(5.8,2.85))
 ax.text(5.6,3.30,'DRR',fontsize=9.5,ha='center',color='#45566a')
 box(.1,.35,9.6,1.05,'Other memory — outside these limits','Object/stream metadata, allocator overhead and OS socket buffers remain separate.\nThe 2 MiB cap bounds admitted payload references, not total memory per connection or RSS.','#f1f3f5')

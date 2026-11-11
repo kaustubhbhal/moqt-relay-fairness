@@ -1,0 +1,2 @@
+{"time_unix": 1794362255.106721, "role": "publisher", "event": "start", "command": ["/private/tmp/moqt-authoring-20261110/.local/relay-variants/86c3e297565ee155/clients/eb64932868054ba1/moqt-load", "publish", "--relay", "moqt://127.0.0.1:4443", "--tls-root", "/private/tmp/moqt-authoring-20261110/results/ice-local-smoke-20261111T015734.422801Z/certs/cert.pem", "--namespace", "experiment", "--duration", "130", "--bitrate", "4000000", "--fps", "30", "--group-frames", "30", "--tracks", "4"]}
+{"time_unix": 1794362266.18617, "role": "publisher", "event": "complete"}

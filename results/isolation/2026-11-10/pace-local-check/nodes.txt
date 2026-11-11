@@ -1,0 +1,4 @@
+127.0.0.1
+local-publisher
+local-generator-a
+local-generator-b

@@ -1,0 +1,140 @@
+{
+  "clients": [
+    {
+      "client": 0,
+      "cohort": "healthy",
+      "tracks": 4,
+      "payload_bytes": 10066264,
+      "throughput_mbps": 6.710842666666667,
+      "timely_mbps": 0.0,
+      "p99_latency_ms": 11291.624,
+      "objects": 604,
+      "track_payload_bytes": {
+        "track-1": 2533232,
+        "track-2": 2533232,
+        "track-0": 2516566,
+        "track-3": 2483234
+      },
+      "terminated_subscriptions": 0,
+      "connection_id": 5696112144
+    },
+    {
+      "client": 1,
+      "cohort": "healthy",
+      "tracks": 1,
+      "payload_bytes": 2533232,
+      "throughput_mbps": 1.6888213333333333,
+      "timely_mbps": 0.0,
+      "p99_latency_ms": 11291.838,
+      "objects": 152,
+      "track_payload_bytes": {
+        "track-0": 2533232
+      },
+      "terminated_subscriptions": 0,
+      "connection_id": 5696159248
+    },
+    {
+      "client": 2,
+      "cohort": "healthy",
+      "tracks": 1,
+      "payload_bytes": 2533232,
+      "throughput_mbps": 1.6888213333333333,
+      "timely_mbps": 0.0,
+      "p99_latency_ms": 11299.084,
+      "objects": 152,
+      "track_payload_bytes": {
+        "track-0": 2533232
+      },
+      "terminated_subscriptions": 0,
+      "connection_id": 5696205328
+    },
+    {
+      "client": 3,
+      "cohort": "healthy",
+      "tracks": 1,
+      "payload_bytes": 2533232,
+      "throughput_mbps": 1.6888213333333333,
+      "timely_mbps": 0.0,
+      "p99_latency_ms": 11303.176,
+      "objects": 152,
+      "track_payload_bytes": {
+        "track-0": 2533232
+      },
+      "terminated_subscriptions": 0,
+      "connection_id": 5696251408
+    }
+  ],
+  "jain_session_throughput": 0.6470441897320607,
+  "aggregate_throughput_mbps": 11.777306666666668,
+  "healthy_mean_mbps": 2.944326666666667,
+  "healthy_mean_timely_mbps": 0.0,
+  "terminated_subscriptions": 0,
+  "window_seconds": 12.0,
+  "warmup_seconds": 3,
+  "publisher_objects_per_second": {
+    "track-0": 30.00079252093576,
+    "track-1": 30.00079252093576,
+    "track-2": 30.00079252093576,
+    "track-3": 30.00079252093576
+  },
+  "peak_relay_rss_bytes": 59555840,
+  "resource_metric_maxima": {
+    "moq_relay_scheduled_bytes_total{session=\"10a8cd7051c4545feb740e519df6e58828f39b87\"}": 3140605.0,
+    "moq_relay_scheduled_bytes_total{session=\"4048bd4d793ee6fc2618d325a18ccf6f6a5f9567\"}": 12534705.0,
+    "moq_relay_scheduled_bytes_total{session=\"35c385390974e56a8962f7199a93f048ef5fce90\"}": 3141697.0,
+    "moq_relay_scheduled_bytes_total{session=\"90322d28f9af051223efe4aa805ca4015714a2bc\"}": 3140605.0,
+    "moq_relay_session_budget_rejections{session=\"90322d28f9af051223efe4aa805ca4015714a2bc\"}": 0.0,
+    "moq_relay_session_budget_rejections{session=\"4048bd4d793ee6fc2618d325a18ccf6f6a5f9567\"}": 0.0,
+    "moq_relay_session_budget_rejections{session=\"10a8cd7051c4545feb740e519df6e58828f39b87\"}": 0.0,
+    "moq_relay_session_budget_rejections{session=\"35c385390974e56a8962f7199a93f048ef5fce90\"}": 0.0,
+    "moq_relay_session_budget_rejections{session=\"237e1c5a030543b3bc7e64b1e480eb510c17306f\"}": 0.0,
+    "moq_relay_session_reserved_bytes{session=\"10a8cd7051c4545feb740e519df6e58828f39b87\"}": 7340032.0,
+    "moq_relay_session_reserved_bytes{session=\"237e1c5a030543b3bc7e64b1e480eb510c17306f\"}": 0.0,
+    "moq_relay_session_reserved_bytes{session=\"90322d28f9af051223efe4aa805ca4015714a2bc\"}": 7340032.0,
+    "moq_relay_session_reserved_bytes{session=\"35c385390974e56a8962f7199a93f048ef5fce90\"}": 7340032.0,
+    "moq_relay_session_reserved_bytes{session=\"4048bd4d793ee6fc2618d325a18ccf6f6a5f9567\"}": 29360128.0,
+    "moq_relay_session_peak_reserved_bytes{session=\"4048bd4d793ee6fc2618d325a18ccf6f6a5f9567\"}": 29360128.0,
+    "moq_relay_session_peak_reserved_bytes{session=\"10a8cd7051c4545feb740e519df6e58828f39b87\"}": 7340032.0,
+    "moq_relay_session_peak_reserved_bytes{session=\"90322d28f9af051223efe4aa805ca4015714a2bc\"}": 7340032.0,
+    "moq_relay_session_peak_reserved_bytes{session=\"237e1c5a030543b3bc7e64b1e480eb510c17306f\"}": 0.0,
+    "moq_relay_session_peak_reserved_bytes{session=\"35c385390974e56a8962f7199a93f048ef5fce90\"}": 7340032.0,
+    "moq_relay_global_reserved_bytes": 27262976.0,
+    "moq_relay_global_peak_reserved_bytes": 27262976.0,
+    "moq_relay_global_admission_rejections": 0.0
+  },
+  "run_directory": "results/isolation/2026-11-10/bandwidth/baseline-r1",
+  "config": {
+    "clients": 4,
+    "stall_clients": 0,
+    "duration": 15.0,
+    "stall_after": 3.0,
+    "stall_for": 6.0,
+    "bitrate": 4000000,
+    "fps": 30,
+    "group_frames": 30,
+    "tracks": 4,
+    "extra_track_clients": 1,
+    "track_bitrates": null,
+    "track_priorities": null,
+    "application_mbps": 12.0,
+    "scheduler": "fifo",
+    "session_buffer_bytes": 0,
+    "global_buffer_bytes": 0,
+    "max_group_bytes": 524288,
+    "receive_window": 8388608,
+    "stream_receive_window": 2097152,
+    "max_uni_streams": 64,
+    "relay_binary": "/private/tmp/moqt-authoring-20261110/.local/relay-variants/86c3e297565ee155/moq-relay-ietf",
+    "load_binary": "/private/tmp/moqt-authoring-20261110/.local/relay-variants/86c3e297565ee155/clients/eb64932868054ba1/moqt-load",
+    "variant_build_manifest": "/private/tmp/moqt-authoring-20261110/.local/relay-variants/86c3e297565ee155/clients/eb64932868054ba1/build.json",
+    "egress_mbps": null,
+    "egress_burst_bytes": 65536,
+    "max_subgroup_age_ms": null,
+    "subgroup_timeout_action": null,
+    "delivery_timeout_ms": null,
+    "allow_subgroup_reset": false,
+    "allow_policy_termination": true,
+    "label": "isolation-bandwidth-baseline",
+    "out": "/private/tmp/moqt-authoring-20261110/results/isolation/2026-11-10/bandwidth/baseline-r1"
+  }
+}

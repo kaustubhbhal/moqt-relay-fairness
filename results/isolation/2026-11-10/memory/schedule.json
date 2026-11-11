@@ -1,0 +1,29 @@
+{
+  "seed": 4254,
+  "runs": [
+    [
+      1,
+      "baseline"
+    ],
+    [
+      1,
+      "bounded"
+    ],
+    [
+      2,
+      "bounded"
+    ],
+    [
+      2,
+      "baseline"
+    ],
+    [
+      3,
+      "bounded"
+    ],
+    [
+      3,
+      "baseline"
+    ]
+  ]
+}
