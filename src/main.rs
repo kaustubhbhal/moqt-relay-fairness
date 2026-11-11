@@ -52,6 +52,14 @@ struct PublishArgs {
     fps: u64,
     #[arg(long, default_value_t = 30)]
     group_frames: u64,
+    /// Number of tracks published on this single QUIC session.
+    #[arg(long, default_value_t = 1)]
+    tracks: usize,
+    /// Per-track rates; when omitted every track uses --bitrate.
+    #[arg(long, value_delimiter = ',')]
+    track_bitrates: Vec<u64>,
+    #[arg(long, value_delimiter = ',')]
+    track_priorities: Vec<u8>,
 }
 #[derive(Args, Clone)]
 struct SubscribeArgs {
@@ -59,6 +67,12 @@ struct SubscribeArgs {
     common: Common,
     #[arg(long, default_value_t = 1)]
     clients: usize,
+    /// Total tracks at the publisher. Ordinary clients request the first one.
+    #[arg(long, default_value_t = 1)]
+    tracks: usize,
+    /// Client IDs below this value request every track on one QUIC session.
+    #[arg(long, default_value_t = 0)]
+    extra_track_clients: usize,
     #[arg(long, default_value_t = 0)]
     client_offset: usize,
     #[arg(long, default_value_t = 0)]
@@ -208,17 +222,44 @@ fn stats(conn: &quinn::Connection, client: usize, cohort: &str, phase: &str) -> 
         json!({"type":"quic_stats","client":client,"cohort":cohort,"phase":phase,"timestamp_unix_us":unix_us()?,"udp_rx_bytes":s.udp_rx.bytes,"udp_tx_bytes":s.udp_tx.bytes,"rx_stream_frames":s.frame_rx.stream,"rx_data_blocked":s.frame_rx.data_blocked,"rx_stream_data_blocked":s.frame_rx.stream_data_blocked,"tx_max_data":s.frame_tx.max_data,"tx_max_stream_data":s.frame_tx.max_stream_data,"tx_acks":s.frame_tx.acks,"rtt_us":s.path.rtt.as_micros() as u64,"lost_packets":s.path.lost_packets}),
     )
 }
+fn track_name(total: usize, index: usize) -> String {
+    if total == 1 {
+        "video".to_string()
+    } else {
+        format!("track-{index}")
+    }
+}
+fn requested_tracks(total: usize, extra_clients: usize, client: usize) -> usize {
+    if client < extra_clients {
+        total
+    } else {
+        1
+    }
+}
 async fn publish(args: PublishArgs) -> Result<()> {
     ensure!(
-        args.fps > 0 && args.group_frames > 0,
-        "fps and group-frames must be positive"
+        args.fps > 0 && args.group_frames > 0 && (1..=16).contains(&args.tracks),
+        "fps/group-frames must be positive and tracks must be 1..=16"
+    );
+    ensure!(
+        args.track_bitrates.is_empty() || args.track_bitrates.len() == args.tracks,
+        "track-bitrates must have one entry per track"
+    );
+    ensure!(
+        args.track_priorities.is_empty() || args.track_priorities.len() == args.tracks,
+        "track-priorities must have one entry per track"
     );
     let denominator = args.fps.checked_mul(8).context("fps overflow")?;
-    let size: usize = (args.bitrate / denominator).try_into()?;
-    ensure!(
-        (HEADER..=16 * 1024 * 1024).contains(&size),
-        "object size must be 32 bytes to 16 MiB"
-    );
+    let mut sizes = Vec::new();
+    for i in 0..args.tracks {
+        let rate = args.track_bitrates.get(i).copied().unwrap_or(args.bitrate);
+        let size: usize = (rate / denominator).try_into()?;
+        ensure!(
+            (HEADER..=16 * 1024 * 1024).contains(&size),
+            "object size must be 32 bytes to 16 MiB"
+        );
+        sizes.push(size);
+    }
     let measurement = duration(args.common.duration)?;
     let Connected {
         _endpoint,
@@ -228,50 +269,70 @@ async fn publish(args: PublishArgs) -> Result<()> {
         ..
     } = time::timeout(Duration::from_secs(15), connect(&args.common, None)).await??;
     emit(json!({"type":"connection","role":"publisher","timestamp_unix_us":unix_us()?}))?;
-    let (writer, reader) = Track::new(
-        TrackNamespace::from_utf8_path(&args.common.namespace),
-        "video",
-    )
-    .produce();
     let run = session.run();
     tokio::pin!(run);
-    let mut published = publisher.publish(reader, KeyValuePairs::default()).await?;
-    tokio::select! {
-        r=published.ok()=>r?,
-        r=&mut run=>{r?;bail!("session ended during publish setup")},
-        _=time::sleep(Duration::from_secs(15))=>bail!("publish acknowledgement timed out"),
+    let mut writers = Vec::new();
+    let mut forwards = FuturesUnordered::new();
+    for i in 0..args.tracks {
+        let name = track_name(args.tracks, i);
+        let (writer, reader) = Track::new(
+            TrackNamespace::from_utf8_path(&args.common.namespace),
+            name.clone(),
+        )
+        .produce();
+        let mut published = publisher.publish(reader, KeyValuePairs::default()).await?;
+        tokio::select! {
+            r=published.ok()=>r?,
+            r=&mut run=>{r?;bail!("session ended during publish setup")},
+            _=time::sleep(Duration::from_secs(15))=>bail!("publish acknowledgement timed out"),
+        }
+        emit(json!({"type":"track_ready","role":"publisher","track":name,
+            "track_index":i,"timestamp_unix_us":unix_us()?}))?;
+        writers.push(writer.subgroups()?);
+        forwards.push(async move { published.serve().await });
     }
     emit(
-        json!({"type":"ready","role":"publisher","publish_mode":"direct_publish","timestamp_unix_us":unix_us()?,"duration":args.common.duration,"bitrate":args.bitrate,"actual_bitrate":size as u64*denominator,"fps":args.fps,"group_frames":args.group_frames,"object_bytes":size}),
+        json!({"type":"ready","role":"publisher","publish_mode":"direct_publish",
+        "timestamp_unix_us":unix_us()?,"duration":args.common.duration,"bitrate":args.bitrate,
+        "actual_bitrate":sizes[0] as u64*denominator,"aggregate_bitrate":sizes.iter().sum::<usize>() as u64*denominator,
+        "fps":args.fps,"group_frames":args.group_frames,"object_bytes":sizes[0],
+        "tracks":args.tracks,"track_object_bytes":sizes,"track_priorities":args.track_priorities}),
     )?;
-    let mut subgroups = writer.subgroups()?;
     let generate = async {
         let mut ticker = time::interval(Duration::from_secs_f64(1.0 / args.fps as f64));
         ticker.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
         let end = Instant::now() + measurement;
-        let mut group = None;
+        let mut groups = (0..args.tracks).map(|_| None).collect::<Vec<_>>();
         let mut seq = 0u64;
         loop {
             tokio::select! { biased; _=time::sleep_until(end)=>break, _=ticker.tick()=>{} }
-            if seq.is_multiple_of(args.group_frames) {
-                group = Some(subgroups.append(128)?);
+            for i in 0..args.tracks {
+                if seq.is_multiple_of(args.group_frames) {
+                    groups[i] = Some(
+                        writers[i].append(args.track_priorities.get(i).copied().unwrap_or(128))?,
+                    );
+                }
+                let sent = unix_us()?;
+                groups[i]
+                    .as_mut()
+                    .context("missing subgroup")?
+                    .write(payload(seq, sent, sizes[i])?)?;
+                emit(
+                    json!({"type":"published","track":track_name(args.tracks,i),"track_index":i,
+                    "seq":seq,"bytes":sizes[i],"sent_unix_us":sent}),
+                )?;
             }
-            let sent = unix_us()?;
-            group
-                .as_mut()
-                .context("missing subgroup")?
-                .write(payload(seq, sent, size)?)?;
-            emit(json!({"type":"published","seq":seq,"bytes":size,"sent_unix_us":sent}))?;
             seq += 1;
         }
         emit(
-            json!({"type":"complete","role":"publisher","objects":seq,"timestamp_unix_us":unix_us()?}),
+            json!({"type":"complete","role":"publisher","objects":seq*args.tracks as u64,
+            "objects_per_track":seq,"timestamp_unix_us":unix_us()?}),
         )?;
         Ok::<_, anyhow::Error>(())
     };
     tokio::select! {
         r=generate=>r?,
-        r=published.serve()=>{r?;bail!("publisher forwarding ended early")},
+        r=forwards.next()=>{r.context("no publisher forwarders")??;bail!("publisher forwarding ended early")},
         r=&mut run=>{r?;bail!("publisher session ended early")},
     }
     connection.close(0u32.into(), b"experiment complete");
@@ -282,6 +343,7 @@ async fn receive(
     client: usize,
     cohort: &str,
     allow_reset: bool,
+    track: &str,
 ) -> Result<()> {
     let mut subgroups = match reader.mode().await? {
         TrackReaderMode::Subgroups(s) => s,
@@ -298,7 +360,7 @@ async fn receive(
                             Ok(Some(bytes)) => bytes,
                             Ok(None) => break,
                             Err(error) if allow_reset && delivery_reset(&error) => {
-                                emit(json!({"type":"subgroup_reset","client":client,"cohort":cohort,
+                                emit(json!({"type":"subgroup_reset","client":client,"cohort":cohort,"track":track,
                                     "group_id":subgroup.group_id,"subgroup_id":subgroup.subgroup_id,
                                     "code":2,"timestamp_unix_us":unix_us()?}))?;
                                 break;
@@ -308,7 +370,7 @@ async fn receive(
                         let received=unix_us()?;
                         let (seq,sent)=parse_payload(&bytes)?;
                         let latency=(received as i128-sent as i128) as f64/1000.0;
-                        emit(json!({"type":"object","client":client,"cohort":cohort,"seq":seq,"bytes":bytes.len(),"sent_unix_us":sent,"received_unix_us":received,"latency_ms":latency}))?;
+                        emit(json!({"type":"object","client":client,"cohort":cohort,"track":track,"seq":seq,"bytes":bytes.len(),"sent_unix_us":sent,"received_unix_us":received,"latency_ms":latency}))?;
                     }
                     Ok::<_,anyhow::Error>(())
                 });
@@ -318,6 +380,9 @@ async fn receive(
     }
 }
 async fn subscriber(args: SubscribeArgs, index: usize) -> Result<()> {
+    if args.tracks > 1 {
+        return subscriber_multitrack(args, index).await;
+    }
     ensure!(
         !args.allow_subgroup_reset || cfg!(feature = "live-resync"),
         "subgroup resets require the patched live-resync client build"
@@ -398,7 +463,7 @@ async fn subscriber(args: SubscribeArgs, index: usize) -> Result<()> {
     let mut terminal_deadline = measurement_end;
     let mut delivery_error = None;
     let mut termination_code = None;
-    let receiver = receive(reader, client, cohort, args.allow_subgroup_reset);
+    let receiver = receive(reader, client, cohort, args.allow_subgroup_reset, "video");
     tokio::pin!(receiver);
     tokio::pin!(drive);
     loop {
@@ -456,6 +521,186 @@ async fn subscriber(args: SubscribeArgs, index: usize) -> Result<()> {
     )?;
     connection.close(0u32.into(), b"experiment complete");
     Ok(())
+}
+
+/// One session driver serves every requested track. Per-track termination must
+/// not stop the other subscriptions or shorten the session's observation time.
+async fn subscriber_multitrack(args: SubscribeArgs, index: usize) -> Result<()> {
+    ensure!(
+        !args.allow_subgroup_reset || cfg!(feature = "live-resync"),
+        "subgroup resets require the patched live-resync client build"
+    );
+    ensure!(
+        args.delivery_timeout_ms != Some(0),
+        "delivery timeout must be positive"
+    );
+    let client = args.client_offset + index;
+    let stalled = index < args.stall_clients;
+    let cohort = if stalled { "stalled" } else { "healthy" };
+    let count = requested_tracks(args.tracks, args.extra_track_clients, client);
+    let Connected {
+        _endpoint,
+        connection,
+        session,
+        mut subscriber,
+        ..
+    } = time::timeout(
+        Duration::from_secs(15),
+        connect(
+            &args.common,
+            Some((
+                args.receive_window,
+                args.stream_receive_window,
+                args.max_uni_streams,
+            )),
+        ),
+    )
+    .await??;
+    let connection_id = connection.stable_id();
+    emit(
+        json!({"type":"connection","role":"subscriber","client":client,
+        "cohort":cohort,"connection_id":connection_id,"timestamp_unix_us":unix_us()?}),
+    )?;
+    let run = session.run();
+    tokio::pin!(run);
+    let mut subscriptions = Vec::new();
+    let mut ids = Vec::new();
+    for i in 0..count {
+        let name = track_name(args.tracks, i);
+        let (writer, reader) = Track::new(
+            TrackNamespace::from_utf8_path(&args.common.namespace),
+            name.clone(),
+        )
+        .produce();
+        let mut params = KeyValuePairs::default();
+        if let Some(ms) = args.delivery_timeout_ms {
+            params.set_intvalue(0x02, ms);
+        }
+        let subscription = tokio::select! {
+            r=subscriber.subscribe_open_with_params(writer,params)=>r?,
+            r=&mut run=>{r?;bail!("session ended during subscribe setup")},
+            _=time::sleep(Duration::from_secs(15))=>bail!("subscribe acknowledgement timed out"),
+        };
+        ids.push(subscription.id);
+        emit(
+            json!({"type":"track_ready","role":"subscriber","client":client,"cohort":cohort,
+            "track":name,"subscription_id":subscription.id,"connection_id":connection_id,
+            "timestamp_unix_us":unix_us()?}),
+        )?;
+        subscriptions.push((name, subscription, reader));
+    }
+    emit(
+        json!({"type":"ready","role":"subscriber","client":client,"cohort":cohort,
+        "timestamp_unix_us":unix_us()?,"duration":args.common.duration,"stall_after":args.stall_after,
+        "stall_for":args.stall_for,"receive_window":args.receive_window,"stream_receive_window":args.stream_receive_window,
+        "max_uni_streams":args.max_uni_streams,"connection_id":connection_id,"subscription_id":ids[0],
+        "subscription_ids":ids,"tracks":count,"delivery_timeout_ms":args.delivery_timeout_ms}),
+    )?;
+    stats(&connection, client, cohort, "ready")?;
+    let drive = async {
+        if stalled {
+            tokio::select! {r=&mut run=>{r?;bail!("session ended before stall")},_=time::sleep(duration(args.stall_after)?)=>{}}
+            emit(
+                json!({"type":"stall_begin","client":client,"cohort":cohort,"timestamp_unix_us":unix_us()?}),
+            )?;
+            stats(&connection, client, cohort, "stall_begin")?;
+            let end = Instant::now() + duration(args.stall_for)?;
+            let mut sampling = time::interval(Duration::from_millis(250));
+            loop {
+                tokio::select! {biased;_=time::sleep_until(end)=>break,_=sampling.tick()=>stats(&connection,client,cohort,"stalled")?}
+            }
+            stats(&connection, client, cohort, "stall_end")?;
+            emit(
+                json!({"type":"stall_end","client":client,"cohort":cohort,"timestamp_unix_us":unix_us()?}),
+            )?;
+        }
+        (&mut run).await?;
+        bail!("subscriber session ended early")
+    };
+    tokio::pin!(drive);
+    let end = Instant::now() + duration(args.common.duration)?;
+    let mut receivers = FuturesUnordered::new();
+    for (name, subscription, reader) in subscriptions {
+        receivers.push(monitor_track(
+            subscription,
+            reader,
+            client,
+            cohort,
+            name,
+            args.allow_subgroup_reset,
+            args.allow_policy_termination,
+        ));
+    }
+    let mut terminated = Vec::new();
+    loop {
+        tokio::select! {
+            biased;
+            result=&mut drive=>{result?;bail!("session driver ended unexpectedly")},
+            result=receivers.next(),if !receivers.is_empty()=>{
+                let (name,code)=result.context("missing receiver result")??;
+                terminated.push(json!({"track":name,"status_code":code}));
+            },
+            _=time::sleep_until(end)=>break,
+        }
+    }
+    stats(&connection, client, cohort, "complete")?;
+    emit(
+        json!({"type":"complete","role":"subscriber","client":client,"cohort":cohort,
+        "timestamp_unix_us":unix_us()?,"connection_id":connection.stable_id(),
+        "subscription_id":ids[0],"subscription_ids":ids,"tracks":count,
+        "termination_code":if terminated.len()==count {Some(6)} else {None},
+        "terminated_tracks":terminated}),
+    )?;
+    connection.close(0u32.into(), b"experiment complete");
+    Ok(())
+}
+
+async fn monitor_track(
+    subscription: moq_transport::session::Subscribe,
+    reader: TrackReader,
+    client: usize,
+    cohort: &str,
+    name: String,
+    allow_reset: bool,
+    allow_termination: bool,
+) -> Result<(String, u64)> {
+    let receiver = receive(reader, client, cohort, allow_reset, &name);
+    tokio::pin!(receiver);
+    let mut delivery_error = None;
+    let mut deadline = None;
+    loop {
+        tokio::select! {
+            biased;
+            result=subscription.closed()=>{
+                if let Some(code)=policy_termination_code(&result).filter(|_|allow_termination) {
+                    if delivery_error.is_none() {
+                        if let Some(result)=receiver.as_mut().now_or_never() {
+                            delivery_error=Some(checked_terminal_read(result)?);
+                        }
+                    }
+                    emit(json!({"type":"subscription_terminated","client":client,"cohort":cohort,
+                        "track":name,"subscription_id":subscription.id,"status_code":code,
+                        "reason":"too_far_behind","timestamp_unix_us":unix_us()?,
+                        "preceding_delivery_error":delivery_error}))?;
+                    return Ok((name.clone(),code));
+                }
+                result.context("subscription ended without allowed terminal status")?;
+                bail!("subscription ended early");
+            },
+            result=&mut receiver,if delivery_error.is_none()=>{
+                let error=result.err().unwrap_or_else(||anyhow::anyhow!("media reader ended early"));
+                if !allow_termination || !expected_terminal_read_error(&error) {return Err(error);}
+                let message=format!("{error:#}");
+                emit(json!({"type":"delivery_error","client":client,"cohort":cohort,
+                    "track":name,"error":message,"timestamp_unix_us":unix_us()?}))?;
+                delivery_error=Some(message);
+                deadline=Some(Instant::now()+Duration::from_secs(2));
+            },
+            _=async {if let Some(end)=deadline {time::sleep_until(end).await;} else {std::future::pending::<()>().await;} }=>{
+                bail!("media error without terminal status for {name}");
+            },
+        }
+    }
 }
 
 fn policy_termination_code(result: &Result<(), ServeError>) -> Option<u64> {
@@ -519,7 +764,9 @@ async fn main() -> Result<()> {
         Command::Publish(args) => publish(args).await,
         Command::Subscribe(args) => {
             ensure!(
-                args.clients > 0 && args.stall_clients <= args.clients,
+                args.clients > 0
+                    && args.stall_clients <= args.clients
+                    && (1..=16).contains(&args.tracks),
                 "invalid client counts"
             );
             duration(args.common.duration)?;
@@ -547,6 +794,15 @@ async fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn multiple_tracks_share_a_client_and_have_stable_names() {
+        assert_eq!(track_name(1, 0), "video");
+        assert_eq!(track_name(4, 3), "track-3");
+        assert_eq!(requested_tracks(4, 1, 0), 4);
+        assert_eq!(requested_tracks(4, 1, 1), 1);
+        assert_eq!(requested_tracks(4, 1, 8), 1);
+    }
+
     #[cfg(feature = "live-resync")]
     #[test]
     fn only_delivery_timeout_resets_are_recoverable() {

@@ -89,6 +89,15 @@ def main():
     p.add_argument("--bitrate", type=int, default=4_000_000)
     p.add_argument("--fps", type=int, default=30)
     p.add_argument("--group-frames", type=int, default=30)
+    p.add_argument("--tracks", type=int, default=1)
+    p.add_argument("--extra-track-clients", type=int, default=0)
+    p.add_argument("--track-bitrates", help="comma-separated per-track bitrates")
+    p.add_argument("--track-priorities", help="comma-separated publisher priorities")
+    p.add_argument("--application-mbps", type=float)
+    p.add_argument("--scheduler", choices=["fifo", "drr"])
+    p.add_argument("--session-buffer-bytes", type=int)
+    p.add_argument("--global-buffer-bytes", type=int)
+    p.add_argument("--max-group-bytes", type=int)
     p.add_argument("--receive-window", type=int, default=65_536)
     p.add_argument("--stream-receive-window", type=int, default=32_768)
     p.add_argument("--max-uni-streams", type=int, default=1)
@@ -105,6 +114,16 @@ def main():
     p.add_argument("--label", default="baseline")
     p.add_argument("--out", type=Path)
     args = p.parse_args()
+    if not 1 <= args.tracks <= 16 or not 0 <= args.extra_track_clients <= args.clients:
+        p.error("require 1 <= tracks <= 16 and 0 <= extra-track-clients <= clients")
+    if args.application_mbps is not None and not 0 < args.application_mbps < 1e9:
+        p.error("application-mbps must be positive and finite")
+    for name in ("session_buffer_bytes", "global_buffer_bytes", "max_group_bytes"):
+        value = getattr(args, name)
+        if value is not None and value < 0:
+            p.error(f"{name} cannot be negative")
+    if (args.session_buffer_bytes or args.global_buffer_bytes) and not args.max_group_bytes:
+        p.error("memory budgets require max-group-bytes > 0")
     if not 0 <= args.stall_clients <= args.clients or args.clients < 1:
         p.error("require clients >= 1 and 0 <= stall-clients <= clients")
     if not 0 < args.stall_after < args.stall_after + args.stall_for < args.duration:
@@ -155,6 +174,15 @@ def main():
                         "--stream-receive-window", str(args.stream_receive_window),
                         "--max-uni-streams", str(args.max_uni_streams)],
     }
+    if args.tracks != 1 or args.extra_track_clients:
+        commands["publisher"] += ["--tracks", str(args.tracks)]
+        commands["subscribers"] += ["--tracks", str(args.tracks), "--extra-track-clients", str(args.extra_track_clients)]
+    for name in ("track_bitrates", "track_priorities"):
+        if getattr(args, name):
+            commands["publisher"] += ["--" + name.replace("_", "-"), getattr(args, name)]
+    for name in ("application_mbps", "scheduler", "session_buffer_bytes", "global_buffer_bytes", "max_group_bytes"):
+        if getattr(args, name) is not None:
+            commands["relay"] += ["--" + name.replace("_", "-"), str(getattr(args, name))]
     if args.egress_mbps is not None:
         commands["relay"] += ["--egress-mbps", str(args.egress_mbps),
                               "--egress-burst-bytes", str(args.egress_burst_bytes)]
