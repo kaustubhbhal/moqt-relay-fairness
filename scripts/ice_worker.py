@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Four-node ICE orchestration. Requires built binaries and a Slurm allocation."""
 
+import hashlib
 import json
 import math
 import os
@@ -32,6 +33,97 @@ def inspect_command(command):
         return {"command": command, "error": str(exc)}
 
 
+POLICY_OPTIONS = {
+    "MOQT_APPLICATION_MBPS": ("application_mbps", "--application-mbps", float),
+    "MOQT_SCHEDULER": ("scheduler", "--scheduler", str),
+    "MOQT_SESSION_BUFFER_BYTES": ("session_buffer_bytes", "--session-buffer-bytes", int),
+    "MOQT_GLOBAL_BUFFER_BYTES": ("global_buffer_bytes", "--global-buffer-bytes", int),
+    "MOQT_MAX_GROUP_BYTES": ("max_group_bytes", "--max-group-bytes", int),
+}
+WORKLOAD_OPTIONS = {
+    "MOQT_BITRATE": ("bitrate", "--bitrate", 4_000_000),
+    "MOQT_FPS": ("fps", "--fps", 30),
+    "MOQT_GROUP_FRAMES": ("group_frames", "--group-frames", 30),
+    "MOQT_TRACKS": ("tracks", "--tracks", 1),
+    "MOQT_EXTRA_TRACK_CLIENTS": ("extra_track_clients", "--extra-track-clients", 0),
+    "MOQT_RECEIVE_WINDOW": ("receive_window", "--receive-window", 65_536),
+    "MOQT_STREAM_RECEIVE_WINDOW": ("stream_receive_window", "--stream-receive-window", 32_768),
+    "MOQT_MAX_UNI_STREAMS": ("max_uni_streams", "--max-uni-streams", 1),
+}
+
+
+def binary_configuration(root, environment):
+    """Validate the actual selected executables, not paths embedded in a manifest."""
+    relay = Path(environment.get("MOQT_RELAY_BINARY", root / "vendor/moq-rs/target/release/moq-relay-ietf")).resolve()
+    load = Path(environment.get("MOQT_LOAD_BINARY", root / "target/release/moqt-load")).resolve()
+    hashes = {}
+    for role, path in (("relay", relay), ("load", load)):
+        if not path.is_file() or not os.access(path, os.X_OK):
+            raise ValueError(f"Selected {role} binary is missing/not executable: {path}")
+        hashes[role] = hashlib.sha256(path.read_bytes()).hexdigest()
+    manifest_path = environment.get("MOQT_BUILD_MANIFEST")
+    manifest = None
+    if manifest_path:
+        manifest_path = str(Path(manifest_path).resolve())
+        manifest = json.loads(Path(manifest_path).read_text())
+        if manifest.get("binary_sha256") != hashes["relay"]:
+            raise ValueError("Build manifest does not match selected relay binary")
+        if manifest.get("client_binary_sha256") != hashes["load"]:
+            raise ValueError("Build manifest does not match selected load binary")
+    return {"relay_binary": str(relay), "load_binary": str(load),
+            "binary_sha256": hashes, "build_manifest_path": manifest_path,
+            "build_manifest": manifest}
+
+
+def experiment_options(environment, clients):
+    options, relay_flags = {}, []
+    for variable, (name, flag, convert) in POLICY_OPTIONS.items():
+        if variable not in environment:
+            continue
+        value = convert(environment[variable])
+        if name == "scheduler":
+            if value not in ("fifo", "drr"):
+                raise ValueError("MOQT_SCHEDULER must be fifo or drr")
+        elif name == "application_mbps":
+            if not math.isfinite(value) or not 0 < value < 1e9:
+                raise ValueError("MOQT_APPLICATION_MBPS must be positive and finite")
+        elif value < 0:
+            raise ValueError(f"{variable} must be nonnegative")
+        options[name] = value
+        relay_flags.extend([flag, str(value)])
+    if (options.get("session_buffer_bytes") or options.get("global_buffer_bytes")) and not options.get("max_group_bytes"):
+        raise ValueError("Memory budgets require MOQT_MAX_GROUP_BYTES > 0")
+    if options.get("scheduler") == "drr" and not options.get("application_mbps"):
+        raise ValueError("DRR requires MOQT_APPLICATION_MBPS")
+    for variable, (name, _flag, default) in WORKLOAD_OPTIONS.items():
+        options[name] = int(environment.get(variable, default))
+    if not 1 <= options["tracks"] <= 16:
+        raise ValueError("MOQT_TRACKS must be 1..16")
+    if not 0 <= options["extra_track_clients"] <= clients:
+        raise ValueError("MOQT_EXTRA_TRACK_CLIENTS must be between zero and total clients")
+    for name in ("bitrate", "fps", "group_frames", "max_uni_streams"):
+        if options[name] <= 0:
+            raise ValueError(f"{name} must be positive")
+    for name in ("receive_window", "stream_receive_window"):
+        if options[name] < 32:
+            raise ValueError(f"{name} must be at least 32 bytes")
+    for variable, name in (("MOQT_TRACK_BITRATES", "track_bitrates"), ("MOQT_TRACK_PRIORITIES", "track_priorities")):
+        raw = environment.get(variable)
+        values = [int(value) for value in raw.split(",")] if raw else []
+        if values and len(values) != options["tracks"]:
+            raise ValueError(f"{variable} must contain one value per track")
+        if name == "track_bitrates" and any(value <= 0 for value in values):
+            raise ValueError("Per-track bitrates must be positive")
+        if name == "track_priorities" and any(not 0 <= value <= 255 for value in values):
+            raise ValueError("Per-track priorities must be bytes")
+        options[name] = values
+    allow = environment.get("MOQT_ALLOW_POLICY_TERMINATION", "0")
+    if allow not in ("0", "1"):
+        raise ValueError("MOQT_ALLOW_POLICY_TERMINATION must be 0 or 1")
+    options["allow_policy_termination"] = allow == "1"
+    return options, relay_flags
+
+
 class Worker:
     def __init__(self):
         self.root = Path(__file__).resolve().parents[1]
@@ -61,6 +153,8 @@ class Worker:
         if self.stalled and not (
                 0 <= self.stall_after < self.stall_after + self.stall_for < self.duration):
             raise ValueError("A positive stall must finish before the run ends")
+        self.binaries = binary_configuration(self.root, os.environ)
+        self.options, self.relay_flags = experiment_options(os.environ, self.clients)
         self.environment = {
             "RUST_LOG": os.environ.get("RUST_LOG", "warn"),
             "TOKIO_WORKER_THREADS": os.environ.get("TOKIO_WORKER_THREADS", "4"),
@@ -134,7 +228,8 @@ class Worker:
                       if key.startswith("SLURM_")},
             "configuration": {"clients": self.clients, "stall_clients": self.stalled,
                               "duration": self.duration, "stall_after": self.stall_after,
-                              "stall_for": self.stall_for},
+                              "stall_for": self.stall_for, **self.options},
+            "binaries": self.binaries, "relay_policy_flags": self.relay_flags,
             "cpu": inspect_command(["lscpu"]),
             "memory": inspect_command(["free", "-b"]),
             "interfaces": inspect_command(["ip", "-brief", "address"]),
@@ -145,12 +240,12 @@ class Worker:
     def relay(self):
         address = socket.gethostbyname(self.host)
         certs = self.run / "certs"
-        binary = self.root / "vendor/moq-rs/target/release/moq-relay-ietf"
+        binary = self.binaries["relay_binary"]
         self.start([str(binary), "--bind", f"{address}:4443",
                     "--tls-cert", str(certs / "cert.pem"),
                     "--tls-key", str(certs / "key.pem"),
                     "--metrics-addr", "127.0.0.1:9090",
-                    "--coordinator-file", str(self.local / "coordinator.json")])
+                    "--coordinator-file", str(self.local / "coordinator.json"), *self.relay_flags])
         end = time.monotonic() + self.startup_timeout
         while True:
             self.check()
@@ -175,15 +270,22 @@ class Worker:
                 time.sleep(1)
 
     def common(self, mode, duration):
-        return [str(self.root / "target/release/moqt-load"), mode,
+        return [self.binaries["load_binary"], mode,
                 "--relay", f"moqt://{self.host}:4443", "--tls-root",
                 str(self.run / "certs/cert.pem"), "--namespace", "experiment",
                 "--duration", f"{duration:g}"]
 
     def publisher(self):
         self.wait_marker("relay.ready")
-        self.start(self.common("publish", self.duration + self.startup_timeout + 30) +
-                   ["--bitrate", "4000000", "--fps", "30", "--group-frames", "30"])
+        command = self.common("publish", self.duration + self.startup_timeout + 30)
+        for name in ("bitrate", "fps", "group_frames"):
+            command += ["--" + name.replace("_", "-"), str(self.options[name])]
+        if self.options["tracks"] != 1:
+            command += ["--tracks", str(self.options["tracks"])]
+        for name in ("track_bitrates", "track_priorities"):
+            if self.options[name]:
+                command += ["--" + name.replace("_", "-"), ",".join(map(str, self.options[name]))]
+        self.start(command)
         end = time.monotonic() + self.startup_timeout
         while True:
             self.check()
@@ -204,10 +306,18 @@ class Worker:
         count = first_count if self.rank == 2 else self.clients - first_count
         offset = 0 if self.rank == 2 else first_count
         stalled = min(count, max(0, self.stalled - offset))
-        self.start(self.common("subscribe", self.duration) +
-                   ["--clients", str(count), "--client-offset", str(offset),
-                    "--stall-clients", str(stalled), "--stall-after", f"{self.stall_after:g}",
-                    "--stall-for", f"{self.stall_for:g}"])
+        command = self.common("subscribe", self.duration) + [
+            "--clients", str(count), "--client-offset", str(offset),
+            "--stall-clients", str(stalled), "--stall-after", f"{self.stall_after:g}",
+            "--stall-for", f"{self.stall_for:g}"]
+        for name in ("receive_window", "stream_receive_window", "max_uni_streams"):
+            command += ["--" + name.replace("_", "-"), str(self.options[name])]
+        if self.options["tracks"] != 1 or self.options["extra_track_clients"]:
+            command += ["--tracks", str(self.options["tracks"]),
+                        "--extra-track-clients", str(self.options["extra_track_clients"])]
+        if self.options["allow_policy_termination"]:
+            command += ["--allow-policy-termination"]
+        self.start(command)
         while self.child.poll() is None:
             self.check(check_child=False)
             time.sleep(0.2)
@@ -228,6 +338,8 @@ class Worker:
             raise RuntimeError(
                 f"Subscriber records mismatch: expected {sorted(expected)}, "
                 f"ready {ready}, complete {complete}")
+        from analyze import validate_observation_duration
+        validate_observation_duration(list(self.read_events()), self.duration)
         self.mark(self.role + ".done", clients=count, offset=offset)
 
     def read_events(self, allow_partial=False):

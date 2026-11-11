@@ -25,5 +25,9 @@ scontrol show job "$SLURM_JOB_ID" > "$MOQT_RUN_DIR/allocation.txt"
 
 # Single srun step avoids concurrent steps competing for allocated CPUs.
 # Every worker is bounded and cleans up its own child process on SIGTERM.
-srun --mpi=none --cpu-bind=cores --kill-on-bad-exit=1 \
+# The submission environment carries MOQT_* selections to every rank. Workers
+# resolve and hash the selected binaries before launch; an explicit build
+# manifest must match both executables. Paths must be readable on all nodes.
+# Defaults still run the stock relay with a single-track workload.
+srun --export=ALL --mpi=none --cpu-bind=cores --kill-on-bad-exit=1 \
   python3 scripts/ice_worker.py

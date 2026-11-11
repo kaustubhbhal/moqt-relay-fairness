@@ -209,7 +209,7 @@ def main():
                "--max-uni-streams", str(streams), "--application-mbps", str(app_rate),
                "--scheduler", "drr" if policy == "drr" else "fifo",
                "--session-buffer-bytes", str(args.session_buffer_bytes if policy == "bounded" else 0),
-               "--global-buffer-bytes", str(args.global_buffer_bytes if policy == "bounded" else 0),
+               "--global-buffer-bytes", str(args.global_buffer_bytes if not bandwidth else 0),
                "--max-group-bytes", str(args.max_group_bytes), "--allow-policy-termination"]
         for name in ("variant_build_manifest", "track_bitrates", "track_priorities"):
             if getattr(args, name):
