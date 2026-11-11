@@ -32,7 +32,7 @@ Finally, dropping old media must not make an incomplete Object look like a succe
 
 ### Experimental platform and workload
 
-We built the testbed around Cloudflare's moq-rs relay, fixed at MoQT draft-16 revision 3b2b584. It has three processes: a publisher, the relay, and a generator that opens independent subscriber connections. We began on one machine so we could debug the implementation and repeat experiments before moving to PACE. The local configuration is shown below.
+We built the testbed around Cloudflare's moq-rs relay, pinned at MoQT draft-16 revision 3b2b584. It has three processes: a publisher, the relay, and a generator that opens independent subscriber connections. We began on one machine so we could debug the implementation and repeat experiments before moving to PACE. The local configuration is shown below.
 
 The publisher generates synthetic media Objects, which are the units of data carried by MoQT. Each Object contains a sequence number, a generation timestamp, and a payload the receiver can verify. We send 30 Objects per second at about 4 Mbit/s. Every second starts a new group; in this workload, each group is sent on one QUIC stream, called a subgroup stream.
 
@@ -51,29 +51,31 @@ This continuous one-to-many workload lets us control the source rate and measure
 
 ### Relay modifications
 
-We first ran the unchanged relay, then added a shared 80 Mbit/s outgoing UDP limit. Sixteen subscribers need about 64 Mbit/s of media before overhead, so normal delivery fits within the limit, while catch-up traffic can create contention. The limit includes QUIC headers, control traffic, and retransmissions. It creates a controlled bandwidth bottleneck; it does not decide which connection gets a fair share.
+We first ran the unchanged relay, then added a shared 80 Mbit/s outgoing UDP limit. Sixteen subscribers need about 64 Mbit/s of media before overhead, so normal delivery fits within the limit, while catch-up traffic can create contention. The limit includes QUIC headers, control traffic, and retransmissions. It creates a controlled bandwidth bottleneck; it doesn’t decide which connection gets a fair share.
 
-We implemented two ways to handle old work. The terminate policy ends a subscription if forwarding one of its subgroups takes more than three seconds. The skip policy uses the same threshold but resets the subscription's pending media streams and waits for a fresh group. The client permits this dropping and continues on its original connection and subscription.
+We implemented two ways to handle old work. The ‘terminate’ policy ends a subscription if forwarding one of its subgroups takes more than three seconds. The ‘skip’ policy uses the same threshold but resets the subscription's pending media streams and waits for a fresh group. The client permits this dropping and continues on its original connection and subscription.
 
-The timer starts when the relay's downstream forwarder observes the subgroup and includes waiting to open a stream, sending data, and waiting for the final acknowledgment. It therefore limits how long forwarding work remains active, rather than directly measuring the client's distance from the live stream. It is not a per-connection memory cap.
+The timer starts when the relay's downstream forwarder observes the subgroup and includes waiting to open a stream, sending data, and waiting for the final acknowledgment. It therefore limits how long forwarding work remains active, rather than directly measuring the client's distance from the live stream. Note: It’s not a per-connection memory cap.
 
-We tested these changes with real QUIC connections, including expiry during stream opening, resets halfway through an Object, and delivery of a fresh group afterward. The Rust and client tests passed, as did 18 Python tests for the experiment and analysis tools. We retain raw logs, source and binary hashes, and the commands needed to reproduce each accepted run.
+We tested these changes with real QUIC connections, including expiry during stream opening, resets halfway through an Object, and delivery of a fresh group afterward. The Rust and client tests passed, as did 18 Python tests for the experiment and analysis tools. We also kept raw logs, source and binary hashes, and the commands needed to reproduce each accepted run.
 
-### Memory ownership and potential scale
+### How a stalled client affects relay memory
 
-To address the memory question from Report I, Figure 1 follows data from the publisher through the relay. The publisher generates Objects as the experiment runs, so there is no original media file loaded into the relay. Incoming data enters a shared media store, while each downstream connection has its own forwarding state and QUIC buffers. Publisher memory and kernel socket buffers are outside the relay's resident memory (RSS) measurements. [6]
+The relay uses memory in two main ways: storing media that subscribers share, and buffering data for each connection. In our testbed, the publisher generates media as it runs, so the relay does not load an original video file. It receives the Objects and stores them so several subscribers can read the same data.
+
+When the relay passes data to QUIC, each subscriber's connection also needs buffers for bytes waiting to be sent or acknowledged. Figure 1 shows these regions separately because a limit on one does not necessarily limit the others. [6]
 
 ![Memory ownership diagram](figures/memory-regions.png)
 
-Figure 1. Shared media and per-connection memory in the tested relay. The limits shown are configuration and job-count limits, not measured memory peaks. A maximum for total memory associated with one connection has not yet been established.
+Figure 1. Where media is stored and which regions are shared. The numbers label configuration limits; they are not measurements of the maximum memory one connection consumes.
 
-A stalled subscriber can keep shared Objects alive after healthy subscribers finish reading them. Those Objects should be counted once, even if several stalled clients reference them. At our source rate, 15 seconds of media contains about 7.5 MB of payload; eight clients retaining that same segment do not create eight independent copies in the shared store.
+A stalled client can prevent shared media from being freed even after healthy clients have finished with it. However, that does not mean every stalled client creates another copy. At our 4 Mbit/s source rate, 15 seconds of media contains about 7.5 MB of payload. If eight clients are waiting for the same segment, the shared store holds that payload once. Clients waiting for different segments or different tracks can keep additional data in memory.
 
-The patched relay allows 128 active subgroup-forwarding jobs per subscription. With our one-second groups, 128 full groups contain about 64 MB of payload. This shows the possible scale of retained data, but it is a conditional calculation, not an observed peak or a bound on the entire connection. Longer groups or additional subscriptions change it. The 1,024-waiter limit shown in the diagram applies to streams waiting for final acknowledgment, and is also a count limit rather than a byte budget. [6]
+The amount one subscription can keep alive depends on the size of its groups. Our patched relay allows 128 active forwarding tasks per subscription. If each task holds one full group from our one-second-group workload, those groups contain about 64 MB of payload. This is an estimate for that specific situation, not an observed peak or a maximum for the whole connection. Larger groups would change the estimate. [6]
 
-QUIC adds another memory region. The tested relay inherits Quinn's 10,000,000-byte send window, about 9.54 MiB, per connection. Its stream buffers contain both data waiting to be sent and data awaiting acknowledgment; these are states within the same buffer, not two separate full copies. The window limits outstanding stream-data accounting, but shared media retention, metadata, allocation overhead, and acknowledged data awaiting reclamation prevent us from treating it as a total memory cap. For scale, 100 independently full 10 MB windows would represent 1 GB of logical stream data, but our tests did not demonstrate that condition. [6, 7]
+QUIC has a separate limit: the tested relay uses a 10 MB send window per connection. That limits its accounting of outstanding stream data, but it does not include the shared media described above or all of the connection's other memory. We therefore cannot say that a connection uses at most 10 MB. We have not yet established a total per-connection memory bound, and our three-second timeout does not provide one. [6, 7]
 
-This distinction guides the next memory experiment. We need to measure unique retained payloads and per-connection allocations separately before choosing how many clients are needed to create meaningful memory pressure. The current RSS results are reported with the evaluation below.
+This is why the memory experiment needs a different scale check from the bandwidth experiment. We will first measure how much extra memory one stalled client keeps alive, then add clients that share a track and clients that receive different tracks. Those measurements will tell us how many connections are needed to create significant memory pressure. The current whole-process memory results appear in the evaluation section.
 
 ## 5. Related Work
 
@@ -87,15 +89,15 @@ Efficient Fair Queuing Using Deficit Round-Robin provides the scheduling baselin
 
 ### Measurements
 
-We completed 115 accepted local runs across three experiments. Each condition has five repetitions, with the order shuffled within each repetition. Unless stated otherwise, comparisons use medians of five run-level measurements. We measure latency from Object generation to a complete receiver read. P99 is the latency at or below which 99% of received Objects arrive. We also measure timely goodput: payload delivered within 150 ms, our chosen live-delivery target. Clients that receive nothing or terminate remain in the throughput calculation.
+We completed 115 local runs across three experiments. Each condition has five repetitions, with the order shuffled within each repetition. Unless stated otherwise, comparisons use medians of five run-level measurements. We measure latency from Object generation to a complete receiver read. P99 is the latency at or below which 99% of received Objects arrive. We also measure timely goodput: payload delivered within 150 ms, our chosen live-delivery target. Clients that receive nothing or terminate remain in the throughput calculation.
 
-For return to live, we require a full one-second window after resume in which every received Object meets the 150 ms target, at least 80% of expected Objects arrive, and no delivery gap exceeds three frame intervals. Recovery time is the start of that window, verified using the following second. We report recovery counts alongside times so clients that do not recover within the ten-second observation period remain visible.
+For return to live experiments, we require a full one-second window after resume in which every received Object meets the 150 ms target, at least 80% of expected Objects arrive, and no delivery gap exceeds three frame intervals. Recovery time is the start of that window, verified using the following second. We report recovery counts alongside times so clients that do not recover within the ten-second observation period remain visible.
 
 ### From baseline behavior to recovery without disconnecting
 
-Our first 20 runs tested the unchanged relay with 16 or 64 clients and no outgoing bandwidth cap. Healthy clients stayed close to the source rate, and we did not find consistent degradation. Previously paused clients received about 10 Mbit/s while catching up with a 4 Mbit/s source, showing that much of their traffic was backlog. This gave us a reason to test recovery when bandwidth was limited.
+Our first 20 runs tested the unchanged relay with 16 or 64 clients and no outgoing bandwidth cap. Healthy clients stayed close to the source rate, and we did not find any consistent degradation. Previously paused clients received about 10 Mbit/s while catching up with a 4 Mbit/s source, showing that much of their traffic was backlogged. This gave us a reason to test recovery when bandwidth was limited.
 
-The next 20 runs used the 80 Mbit/s cap with 16 clients, either none or eight paused for 15 seconds. With the three-second termination policy, healthy-client recovery P99 fell from 190 to 11 ms, and peak relay RSS fell from 36.92 to 23.70 MiB. However, all 40 paused subscriptions across the five mixed runs were terminated. Ending them protected healthy clients but did not let the stalled clients recover.
+The next 20 runs used the 80 Mbit/s cap with 16 clients, either none or eight paused for 15 seconds. With the three-second termination policy, healthy-client recovery P99 fell from 190 to 11 ms, and peak relay RSS fell from 36.92 to 23.70 MiB. However, 40 paused subscriptions across the five mixed runs were terminated. Ending them protected healthy clients but did not let the stalled clients recover.
 
 We then tested the skip policy to see whether we could preserve the benefit while keeping those subscriptions open. This experiment had 75 runs: three policies (timeout disabled, terminate, and skip), four pause lengths (0.25, 1, 2, and 4 seconds), and five repetitions, plus five healthy-only controls per policy. Mixed runs paused eight of 16 clients after five seconds and observed them for ten seconds after resume. All conditions used the same relay and client builds and the same bandwidth cap.
 
@@ -112,7 +114,7 @@ The clearest benefit appeared with four-second pauses. Skip recovered all 40 sta
 
 Recovery time varied despite the low 24 ms median in the table. Skip's five run medians ranged from 5 ms to 2.104 seconds, and the slowest individual client took 2.398 seconds. The terminate policy reduced healthy-client P99 further, to 13 ms, but ended all 40 paused subscriptions. No healthy client was terminated in this experiment.
 
-![Recovery results](../results/recovery/2026-11-10/figures/recovery.png)
+![Recovery experiment results](../results/recovery/2026-11-10/figures/recovery.png)
 
 Figure 2. Individual runs and medians across pause lengths. Recovery counts include every paused client; recovery-time points include only clients that recovered. Markers at ten seconds identify runs with unrecovered or terminated clients, not measured recovery times.
 
