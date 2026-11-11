@@ -1,5 +1,7 @@
 # MoQT relay fairness
 
+The current implementation adds **per-session DRR and fixed retained-payload budgets**. Start with [session isolation](docs/session-isolation.md) for the code scope, controlled comparisons, and reproduction commands. Earlier timeout/recovery results below remain historical supporting experiments.
+
 CS 4251 Group 16's experiment setup for studying how stalled subscribers affect a Media over QUIC relay.
 
 The first milestone measures the existing relay. The second adds a shared UDP egress cap and an optional fixed subscription timeout. The third skips expired media streams so stalled clients can return to live on the same subscription. DRR and adaptive resource budgets are not implemented yet. We use actual QUIC connections and synthetic, paced media objects; these are transport experiments, not video playback tests.

@@ -1,5 +1,7 @@
 # Memory ownership audit for Progress Report II
 
+**Update:** The original audit below describes the pinned relay and the earlier timeout patch. The new cumulative `0003-session-isolation.patch` adds enforced subgroup payload ceilings, per-session retained-payload reservations, and a global shared-group reservation cap. See [the implemented controls and their exact scope](session-isolation.md). Historical task-count estimates below are not the new configured byte budgets. Neither version establishes a total per-connection RSS bound.
+
 This is a source-based model of the tested subgroup-stream path, not a new memory-pressure experiment. The tested relay uses the cumulative recovery patch against Cloudflare moq-rs revision `3b2b584b47e4a18f3a6bf48dc9a665c736743443`, with Quinn-proto 0.11.13. No finite total memory budget per downstream connection has been implemented or established.
 
 ![Memory regions](figures/memory-regions.png)

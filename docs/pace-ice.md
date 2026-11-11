@@ -123,7 +123,7 @@ MOQT_MAX_UNI_STREAMS=64 MOQT_MAX_GROUP_BYTES=524288 \
   sbatch scripts/ice.slurm
 ```
 
-Repeat with `MOQT_SCHEDULER=drr`, holding all other settings fixed. For the memory comparison, use a single track and small receive windows, add stalled clients, and compare zero budgets with fixed session/global budgets. Keep the group-size ceiling identical in both conditions. Record termination rates and healthy-client delivery alongside the reservation counters. These are prepared commands, not claims that these experiments have run on ICE.
+Repeat with `MOQT_SCHEDULER=drr`, holding all other settings fixed. For the memory comparison, use a single track and small receive windows, add stalled clients, and compare a disabled session limit with a 2 MiB session limit. Keep the 8 MiB global cap and 512 KiB group-size ceiling identical in both conditions; verify zero global rejections so the comparison isolates the session policy. Record termination rates and healthy-client delivery alongside the reservation counters. These are prepared commands, not claims that these experiments have run on ICE.
 
 ## 3. Submit a short four-node check
 
