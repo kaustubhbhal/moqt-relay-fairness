@@ -23,7 +23,7 @@ index 4a08799..45a51fd 100644
  # Bearer tokens are held in a type that zeroizes on drop and redacts under
  # Debug. Not optional: the enforcement points compile without `auth-cat`, so
 diff --git a/moq-relay-ietf/src/bin/moq-relay-ietf/main.rs b/moq-relay-ietf/src/bin/moq-relay-ietf/main.rs
-index 9508cb2..f026afc 100644
+index 9508cb2..9c6d256 100644
 --- a/moq-relay-ietf/src/bin/moq-relay-ietf/main.rs
 +++ b/moq-relay-ietf/src/bin/moq-relay-ietf/main.rs
 @@ -100,6 +100,39 @@ pub struct Cli {
@@ -72,7 +72,7 @@ index 9508cb2..f026afc 100644
      let cli = Cli::parse();
 +    let application_rate = if let Some(mbps) = cli.application_mbps {
 +        anyhow::ensure!(
-+            mbps.is_finite() && mbps >= 0.000008 && mbps < 1e9,
++            mbps.is_finite() && (0.000008..1e9).contains(&mbps),
 +            "invalid application rate"
 +        );
 +        Some((mbps * 1_000_000.0 / 8.0) as u64)
@@ -600,23 +600,20 @@ index d98f9eb..8d14e88 100644
 +pub mod resources;
 +pub mod scheduler;
 diff --git a/moq-relay-ietf/src/producer.rs b/moq-relay-ietf/src/producer.rs
-index 57d7754..8932c17 100644
+index 57d7754..a77569a 100644
 --- a/moq-relay-ietf/src/producer.rs
 +++ b/moq-relay-ietf/src/producer.rs
-@@ -36,6 +36,12 @@ pub struct Producer {
+@@ -36,6 +36,9 @@ pub struct Producer {
      /// Token authorization state. Internal relay peers and sessions in scopes
      /// without a policy carry `None`, permitting every request.
      auth: Option<SessionAuth>,
 +    subgroup_timeout: Option<Duration>,
 +    subgroup_skip: bool,
-+    resources: Option<(
-+        Option<moq_transport::session::SharedWritePolicy>,
-+        Option<(moq_transport::serve::ByteBudget, usize)>,
-+    )>,
++    resources: Option<crate::resources::SessionResources>,
  }
  
  /// Why the wait for upstream readiness ended without the subscription being
-@@ -83,9 +89,72 @@ impl Producer {
+@@ -83,9 +86,72 @@ impl Producer {
              upstream_namespaces,
              context,
              auth,
@@ -689,7 +686,7 @@ index 57d7754..8932c17 100644
      /// Send PUBLISH_NAMESPACE for a set of tracks to the remote peer.
      pub async fn publish_namespace(&mut self, tracks: TracksReader) -> Result<(), SessionError> {
          self.publisher.publish_namespace(tracks).await
-@@ -175,6 +244,13 @@ impl Producer {
+@@ -175,6 +241,13 @@ impl Producer {
      }
  
      async fn serve_fetch(self, fetch: FetchRequested) -> Result<(), anyhow::Error> {
@@ -703,7 +700,7 @@ index 57d7754..8932c17 100644
          let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
          let standalone = tokio::select! {
              biased;
-@@ -291,6 +367,21 @@ impl Producer {
+@@ -291,6 +364,21 @@ impl Producer {
              return Err(err.into());
          }
  
@@ -725,7 +722,7 @@ index 57d7754..8932c17 100644
          // Local lookup order inside Locals:
          // 1. actual FullTrackName -> TrackReader media cache
          // 2. PUBLISH_NAMESPACE route source, which triggers upstream SUBSCRIBE
-@@ -340,9 +431,14 @@ impl Producer {
+@@ -340,9 +428,14 @@ impl Producer {
                  }
              }
  
@@ -741,7 +738,7 @@ index 57d7754..8932c17 100644
          // Check remote tracks after local exact tracks and namespace route sources.
          match self
              .remotes
-@@ -360,7 +456,7 @@ impl Producer {
+@@ -360,7 +453,7 @@ impl Producer {
                      // Held until serving finishes; the cross-relay subscription is
                      // released once the last guard for this track drops.
                      let _interest_guard = interest_guard;
@@ -750,7 +747,7 @@ index 57d7754..8932c17 100644
                  }
              }
              Err(e) => {
-@@ -435,6 +531,13 @@ impl Producer {
+@@ -435,6 +528,13 @@ impl Producer {
              return Err(anyhow::anyhow!("unauthorized subscribe_namespace"));
          }
  
@@ -856,10 +853,10 @@ index 1967967..fe3bf83 100644
                              } else {
 diff --git a/moq-relay-ietf/src/resources.rs b/moq-relay-ietf/src/resources.rs
 new file mode 100644
-index 0000000..6542de3
+index 0000000..63f36a8
 --- /dev/null
 +++ b/moq-relay-ietf/src/resources.rs
-@@ -0,0 +1,152 @@
+@@ -0,0 +1,154 @@
 +// SPDX-FileCopyrightText: 2026 MoQT Relay Fairness project contributors
 +// SPDX-License-Identifier: MIT OR Apache-2.0
 +
@@ -869,6 +866,8 @@ index 0000000..6542de3
 +    session::{SharedWritePolicy, Subscriber},
 +};
 +use std::sync::Arc;
++
++pub type SessionResources = (Option<SharedWritePolicy>, Option<(ByteBudget, usize)>);
 +
 +#[derive(Clone)]
 +pub struct Resources {
@@ -920,7 +919,7 @@ index 0000000..6542de3
 +            max_group,
 +        })
 +    }
-+    pub fn session(&self, id: String) -> (Option<SharedWritePolicy>, Option<(ByteBudget, usize)>) {
++    pub fn session(&self, id: String) -> SessionResources {
 +        let policy = self.scheduler.as_ref().map(|s| s.session(id.clone()));
 +        // Track unbounded baseline reservations too, whenever a group bound is set.
 +        let budget = (self.max_group > 0).then(|| {
@@ -2435,7 +2434,7 @@ index df937a4..314710d 100644
 +    .unwrap();
 +}
 diff --git a/moq-transport/src/session/subscribed.rs b/moq-transport/src/session/subscribed.rs
-index 68518b9..95cef3a 100644
+index 68518b9..8873c4e 100644
 --- a/moq-transport/src/session/subscribed.rs
 +++ b/moq-transport/src/session/subscribed.rs
 @@ -2,11 +2,16 @@
@@ -2649,7 +2648,7 @@ index 68518b9..95cef3a 100644
      async fn serve_subgroups(
          &mut self,
          mut subgroups: serve::SubgroupsReader,
-@@ -542,66 +670,138 @@ impl ObjectForwarder {
+@@ -542,69 +670,143 @@ impl ObjectForwarder {
          let mut tasks = FuturesUnordered::new();
          let mut acknowledgements = FuturesUnordered::new();
          let mut done: Option<Result<(), ServeError>> = None;
@@ -2805,7 +2804,12 @@ index 68518b9..95cef3a 100644
          }
      }
  
-@@ -612,6 +812,9 @@ impl ObjectForwarder {
++    // Keep the per-stream task inputs explicit; none are session-global mutable state.
++    #[allow(clippy::too_many_arguments)]
+     async fn serve_subgroup(
+         header: data::SubgroupHeader,
+         mut subgroup_reader: serve::SubgroupReader,
+@@ -612,6 +814,9 @@ impl ObjectForwarder {
          state: State<ObjectForwarderState>,
          mlog: Option<Arc<Mutex<mlog::MlogWriter>>>,
          delivery_filter: DeliveryFilter,
@@ -2815,7 +2819,7 @@ index 68518b9..95cef3a 100644
      ) -> Result<Option<SubgroupOutput>, SessionError> {
          tracing::trace!(
              "[PUBLISHER] serve_subgroup: starting - group_id={}, subgroup_id={:?}, priority={}",
-@@ -637,8 +840,16 @@ impl ObjectForwarder {
+@@ -637,8 +842,16 @@ impl ObjectForwarder {
          // TODO figure out u32 vs u64 priority
          send_stream.set_priority(subgroup_reader.priority as i32);
  
@@ -2834,7 +2838,7 @@ index 68518b9..95cef3a 100644
          let res = Self::serve_subgroup_objects(
              header,
              subgroup_reader,
-@@ -1036,6 +1247,64 @@ impl ObjectForwarderRecv {
+@@ -1036,6 +1249,64 @@ impl ObjectForwarderRecv {
  mod tests {
      use super::*;
  
@@ -2900,10 +2904,19 @@ index 68518b9..95cef3a 100644
      fn subscribed_state_counts_opened_streams() {
          let mut state = ObjectForwarderState::default();
 diff --git a/moq-transport/src/session/subscriber.rs b/moq-transport/src/session/subscriber.rs
-index cbd1726..91dc1a7 100644
+index cbd1726..4594f47 100644
 --- a/moq-transport/src/session/subscriber.rs
 +++ b/moq-transport/src/session/subscriber.rs
-@@ -32,9 +32,36 @@ use super::{
+@@ -22,6 +22,8 @@ use crate::{
+ 
+ use crate::watch::Queue;
+ 
++type PayloadBudget = (usize, Option<serve::ByteBudget>);
++
+ use super::{
+     inclusive_end, validate_fetch_params, Fetch, FetchRecv, OpenSubscribeNamespace, PendingRequest,
+     PendingRequests, PendingResponse, PublishReceived, PublishReceivedRecv, PublishedNamespace,
+@@ -32,9 +34,36 @@ use super::{
  // Default timeout for waiting for subscribe aliases to become available via SUBSCRIBE_OK (1 second)
  const DEFAULT_ALIAS_WAIT_TIME_MS: u64 = 1000;
  
@@ -2936,11 +2949,11 @@ index cbd1726..91dc1a7 100644
  // TODO remove Clone.
  #[derive(Clone)]
  pub struct Subscriber {
-+    payload_budget: Arc<Mutex<Option<(usize, Option<serve::ByteBudget>)>>>,
++    payload_budget: Arc<Mutex<Option<PayloadBudget>>>,
      /// Active inbound PUBLISH_NAMESPACE messages, keyed by namespace.
      published_namespaces: Arc<Mutex<HashMap<TrackNamespace, PublishedNamespaceRecv>>>,
  
-@@ -235,6 +262,15 @@ impl SubscriberNameRegistry {
+@@ -235,6 +264,15 @@ impl SubscriberNameRegistry {
  }
  
  impl Subscriber {
@@ -2956,7 +2969,7 @@ index cbd1726..91dc1a7 100644
      #[cfg(test)]
      pub(super) fn new(
          outgoing: Queue<Message>,
-@@ -268,6 +304,7 @@ impl Subscriber {
+@@ -268,6 +306,7 @@ impl Subscriber {
          session_lifetime: CancellationToken,
      ) -> Self {
          Self {
@@ -2964,7 +2977,7 @@ index cbd1726..91dc1a7 100644
              published_namespaces: Default::default(),
              published_namespace_queue: Default::default(),
              subscribes: Default::default(),
-@@ -1498,12 +1535,26 @@ impl Subscriber {
+@@ -1498,12 +1537,26 @@ impl Subscriber {
          let mut previous_object_id: Option<u64> = None;
          let mut subgroup_writer: Option<serve::SubgroupWriter> = None;
  
@@ -2993,7 +3006,7 @@ index cbd1726..91dc1a7 100644
                      tracing::trace!(
                          "[SUBSCRIBER] recv_subgroup_objects: object #{} with ext headers \
                           object_id_delta={} payload={} status={:?} ext={:?}",
-@@ -1534,7 +1585,13 @@ impl Subscriber {
+@@ -1534,7 +1587,13 @@ impl Subscriber {
                          Some(obj_copy),
                      )
                  } else {
@@ -3008,7 +3021,7 @@ index cbd1726..91dc1a7 100644
                      tracing::trace!(
                          "[SUBSCRIBER] recv_subgroup_objects: object #{} \
                           object_id_delta={} payload={} status={:?}",
-@@ -1618,11 +1675,21 @@ impl Subscriber {
+@@ -1618,11 +1677,21 @@ impl Subscriber {
  
              // Write the object payload.
              // TODO SLG - object_id_delta and object status are still being ignored
@@ -3033,7 +3046,7 @@ index cbd1726..91dc1a7 100644
                      tracing::error!(
                          session_id = %session_id,
                          "[SUBSCRIBER] recv_subgroup_objects: stream ended with {} bytes remaining",
-@@ -1662,6 +1729,7 @@ impl Subscriber {
+@@ -1662,6 +1731,7 @@ impl Subscriber {
      ) -> Result<(), SessionError> {
          let subscribes = self.subscribes.clone();
          let publishes_received = self.publishes_received.clone();
@@ -3041,7 +3054,7 @@ index cbd1726..91dc1a7 100644
          Self::recv_subgroup_objects(
              self.session_id.clone(),
              stream_header_type,
-@@ -1677,7 +1745,11 @@ impl Subscriber {
+@@ -1677,7 +1747,11 @@ impl Subscriber {
                              subscribe_id, header.track_alias
                          )))
                      })?;
@@ -3054,7 +3067,7 @@ index cbd1726..91dc1a7 100644
                  }
                  TrackOrigin::Publish(publish_id) => {
                      let mut map = publishes_received
-@@ -1689,7 +1761,11 @@ impl Subscriber {
+@@ -1689,7 +1763,11 @@ impl Subscriber {
                              publish_id, header.track_alias
                          )))
                      })?;
@@ -3067,7 +3080,7 @@ index cbd1726..91dc1a7 100644
                  }
              },
          )
-@@ -1698,6 +1774,11 @@ impl Subscriber {
+@@ -1698,6 +1776,11 @@ impl Subscriber {
  
      /// Handle reception of a datagram from the QUIC session.
      pub async fn recv_datagram(&mut self, datagram: bytes::Bytes) -> Result<(), SessionError> {
@@ -3079,7 +3092,7 @@ index cbd1726..91dc1a7 100644
          let mut cursor = io::Cursor::new(datagram);
          let datagram = data::Datagram::decode(&mut cursor)?;
  
-@@ -2445,3 +2526,219 @@ mod tests {
+@@ -2445,3 +2528,219 @@ mod tests {
          assert!(observer.track_alias_map.lock().unwrap().is_empty());
      }
  }
