@@ -12,7 +12,7 @@ Our project looks at how a Media over QUIC Transport (MoQT) relay can share band
 
 A MoQT relay receives media from a publisher and forwards it to many subscribers. Each subscriber has its own QUIC connection, but the connections share the relay's memory and outgoing bandwidth. When one subscriber stops keeping up, the relay may retain old media for it. Once that subscriber resumes, sending its backlog can compete with current media being delivered to other clients.
 
-Report I proposed both fair bandwidth scheduling and limits on buffered media. We started with stalled subscribers because they give us a controlled way to study this interaction. Our immediate question was whether the relay could protect healthy clients while still allowing stalled clients to recover.
+Report I proposed both fair bandwidth scheduling and limits on buffered media. We started with stalled subscribers because they give us a controlled way to study both resources: their backlog can keep data in memory, and sending that backlog can consume bandwidth needed by other clients. Our immediate question was whether a policy that drops stale media could reduce those costs while still allowing stalled clients to recover.
 
 ## 2. Motivation
 
@@ -29,6 +29,8 @@ The second challenge was separating shared memory from memory used by individual
 Finally, dropping old media must not make an incomplete Object look like a successful delivery. We changed the receiver to recognize intentional stream resets and continue reading later groups, while still treating malformed or truncated data as errors.
 
 ## 4. Methodology
+
+Our hypothesis is that the relay can make better use of memory and bandwidth by stopping work on media that is already too old to be useful. To test this, we compare the same workload with no timeout, with subscription termination, and with stale-media skipping. We look for lower memory use and more timely delivery under the same bandwidth cap, while checking that the improvement does not come from disconnecting clients.
 
 ### Experimental platform and workload
 
@@ -53,7 +55,7 @@ This continuous one-to-many workload lets us control the source rate and measure
 
 We first ran the unchanged relay, then added a shared 80 Mbit/s outgoing UDP limit. Sixteen subscribers need about 64 Mbit/s of media before overhead, so normal delivery fits within the limit, while catch-up traffic can create contention. The limit includes QUIC headers, control traffic, and retransmissions. It creates a controlled bandwidth bottleneck; it doesn’t decide which connection gets a fair share.
 
-We implemented two ways to handle old work.
+We implemented two new ways to handle old work.
 
 1. The ‘terminate’ policy ends a subscription if forwarding one of its subgroups takes more than three seconds.
 
@@ -63,7 +65,7 @@ The timer starts when the relay's downstream forwarder observes the subgroup and
 
 We tested these changes with real QUIC connections, including expiry during stream opening, resets halfway through an Object, and delivery of a fresh group afterward. The Rust and client tests passed, as did 18 Python tests for the experiment and analysis tools. We also kept raw logs, source and binary hashes, and the commands needed to reproduce each accepted run.
 
-### How a stalled client affects relay memory
+### Investigation: How a stalled client affects relay memory
 
 The relay uses memory in two main ways: storing media that subscribers share, and buffering data for each connection. In our testbed, the publisher generates media as it runs, so the relay does not load an original video file. It receives the Objects and stores them so several subscribers can read the same data.
 
@@ -79,7 +81,7 @@ The amount one subscription can keep alive depends on the size of its groups. Ou
 
 QUIC has a separate limit: the tested relay uses a 10 MB send window per connection. That limits its accounting of outstanding stream data, but it does not include the shared media described above or all of the connection's other memory. We therefore cannot say that a connection uses at most 10 MB. We have not yet established a total per-connection memory bound, and our three-second timeout does not provide one. [6, 7]
 
-This is why the memory experiment needs a different scale check from the bandwidth experiment. We will first measure how much extra memory one stalled client keeps alive, then add clients that share a track and clients that receive different tracks. Those measurements will tell us how many connections are needed to create significant memory pressure. The current whole-process memory results appear in the evaluation section.
+This investigation identifies two places where a memory policy needs to act: shared media retained by old forwarding tasks, and each connection's QUIC buffers. Skipping old work can release references to shared media, but the savings depend on whether other clients still need that data and when buffers are freed. Our local RSS measurements test whether total process memory falls. Measuring the individual regions next will show where that reduction comes from. Comparing clients that retain the same data with clients that retain different data will also tell us how many are needed to create memory pressure.
 
 ## 5. Related Work
 
@@ -93,7 +95,9 @@ Efficient Fair Queuing Using Deficit Round-Robin provides the scheduling baselin
 
 ### Measurements
 
-We completed 115 local runs across three experiments. Each condition has five repetitions, with the order shuffled within each repetition. Unless stated otherwise, we report the median of the five runs.
+Our tests build evidence in stages. The unchanged relay establishes how stalled clients fall behind and catch up. The capped comparisons test whether handling that backlog differently improves delivery when bandwidth is limited. Comparing memory use and recovery then checks whether a policy reduces resource use while continuing to serve those clients.
+
+We completed 115 local runs across these experiments. Each condition has five repetitions, with the order shuffled within each repetition. Unless stated otherwise, we report the median of the five runs.
 
 We use two measures to check whether clients receive useful live media. Latency is the time from Object generation to a complete receiver read; P99 is the latency at or below which 99% of received Objects arrive. Timely goodput counts only payload delivered within 150 ms, our chosen live-delivery target. Clients that receive nothing or terminate remain in the throughput calculation.
 
@@ -109,6 +113,8 @@ We then tested the ‘skip’ policy to see whether we could keep healthy client
 
 In each mixed run, eight of 16 clients paused after five seconds, then had ten seconds to recover after resuming. We tested pauses of 0.25, 1, 2, and 4 seconds, with five repetitions for each policy and pause length. We also ran five healthy-only controls per policy, giving 75 runs in total. All conditions used the same relay and client builds. Table 1 compares recovery with the baseline and skip policies.
 
+Table 1. Recovery across five runs, with eight paused clients per run. For each run, we take the median recovery time among clients that recovered, then report the median of those five values. The four-second baseline time excludes ten clients that did not recover within ten seconds.
+
 | **Pause Length** | **Baseline #recovered** | **Baseline recovery time** | **Skip Policy #recovered** | **Skip Policy recovery time** |
 | --- | --- | --- | --- | --- |
 | 0.25 s | 40/40 | 0.088 s | 40/40 | 0.080 s |
@@ -116,11 +122,11 @@ In each mixed run, eight of 16 clients paused after five seconds, then had ten s
 | 2 s | 40/40 | 4.104 s | 40/40 | 3.979 s |
 | 4 s | 30/40 | 8.443 s | 40/40 | 0.024 s |
 
-Table 1. Recovery across five runs, with eight paused clients per run. For each run, we take the median recovery time among clients that recovered, then report the median of those five values. The four-second baseline time excludes ten clients that did not recover within ten seconds.
-
 The clearest benefit appeared with four-second pauses. The skip policy recovered all 40 stalled clients on their original connections and subscriptions, compared with 30 of 40 for the baseline. During the final five seconds of recovery, previously paused clients received about 4.00 Mbit/s of timely data with the skip policy, compared to 1.30 Mbit/s for the baseline. This means they were receiving current media at roughly the source rate again.
 
-Healthy clients benefited too. During recovery, their P99 latency fell from 174 to 48 ms, and their timely goodput rose from 3.91 to 4.00 Mbit/s per client. The terminate policy brought P99 down further, to 13 ms, but ended all 40 paused subscriptions. The skip policy therefore gave us a way to reduce interference while keeping those clients connected. No healthy client was terminated.
+Healthy clients benefited too. During recovery, their P99 latency fell from 174 to 48 ms, and their timely goodput rose from 3.91 to 4.00 Mbit/s per client. The terminate policy brought P99 down further, to 13 ms, but ended all 40 paused subscriptions. The skip policy gave us a way to reduce interference while keeping those clients connected. No healthy client was terminated.
+
+Because these policies had the same 80 Mbit/s cap, the improvement shows that changing which media the relay sends can improve useful delivery within a fixed bandwidth allowance. This is the bandwidth benefit we have demonstrated so far. It does not establish that skip sends fewer total bytes; measuring total outgoing bytes alongside timely payload will let us test that separately.
 
 The 24 ms median in Table 1 does not mean every client recovered that quickly. Across skip's five runs, the median recovery time ranged from 5 ms to 2.104 seconds; the slowest individual client took 2.398 seconds. Figure 2 shows the variation across runs.
 
@@ -132,15 +138,17 @@ Figure 2. Individual runs and medians across pause lengths. Recovery counts incl
 
 The shorter pauses help explain when the policy is useful. Neither timeout policy activated during pauses of 0.25, 1, or 2 seconds, so both behaved much like the baseline. All clients recovered, but a two-second pause still led to about four seconds of catch-up. During the four-second pauses, the forwarding timeout did activate, allowing skip to discard old work. Our fixed threshold can therefore help a longer stall while leaving a shorter one largely unchanged.
 
-The memory result was smaller: for four-second pauses, median peak relay RSS during recovery fell from 26.98 MiB with the baseline to 23.81 MiB with skip. This measures the whole relay process, so it does not tell us how much memory each connection retained. It also does not demonstrate memory exhaustion. The results support skipping as a way to reduce interference from catch-up traffic; they do not yet show that we can enforce a memory limit for each client.
+The memory measurements provide an initial result for the other half of our hypothesis. With four-second pauses, median peak relay RSS during recovery fell from 26.98 MiB with the baseline to 23.81 MiB with skip, a reduction of about 12%. All 40 stalled clients recovered with skip. In this workload, the policy therefore used less peak process memory while bringing those clients back to current media.
+
+The memory audit in Section 4 helps explain what we need to check next. Dropping stale work may reduce both retained shared media and per-connection buffering, but RSS combines those regions with the rest of the process. We need to measure them separately to identify where the savings occur, then increase the number of stalled clients and the amount of retained media to test whether memory stays within a chosen budget. The current result shows a lower measured peak; that next comparison will test whether we can control memory growth.
 
 We checked that the recovery results came from valid runs. All 75 short-pause runs passed duration checks, covering 1,200 client observations, and the publisher stayed at 29.8–30.1 Objects/s during recovery. Connection and subscription identifiers confirmed that clients recovered without reconnecting. Earlier attempts with large timing gaps were excluded and kept separately.
 
 These are still local results: the publisher, relay, and clients shared one machine. We also limited each client to one incoming media stream because overlapping groups exposed a recovery failure in the pinned library. Finally, our synthetic groups can be used independently, while a video player may need a keyframe before playback resumes. The current experiments demonstrate delivery of fresh Objects, not restored video playback.
 
-### Preparing the first PACE ICE experiment
+### Preparing the PACE ICE experiment
 
-PACE will let us separate the relay's resources from the machines generating its traffic. We have started work on a four-node launcher: one relay, one publisher, and two client generators that split the subscribers evenly. It requests eight CPUs and 32 GiB of memory per node for 30 minutes. The workers passed a local check of startup, client completion, logging, and cleanup using real QUIC connections. This checks the launcher logic, but not the PACE environment. [4, 5]
+PACE will let us separate the relay's resources from the machines generating its traffic. We have started work on a four-node launcher: one relay, one publisher, and two client generators that split the subscribers evenly. It requests eight CPUs and 32 GiB of memory per node for 30 minutes. The workers passed a local check of startup, client completion, logging, and cleanup using real QUIC connections. This helped us check the launcher logic, but not the PACE environment. [4, 5]
 
 The first PACE run will be a 20-second check with 16 clients, no pauses, and the stock relay. We will check that every client completes, delivered payloads are valid, the publisher maintains its intended rate, and the generators have CPU capacity to spare. We will also record the allocated hardware and check clock differences before using timestamps from separate machines to measure latency.
 
@@ -148,13 +156,15 @@ Once that check passes, we will compare zero versus eight paused clients: five s
 
 ### Remaining work and project scope
 
-Report I proposed both fair bandwidth scheduling and memory limits. Our progress so far addresses a narrower question: we can reproduce interference from stalled clients and reduce it by dropping stale media while keeping those clients connected. The testbed, two timeout policies, and repeated local experiments are complete, but they do not yet establish fairness across sessions or memory isolation.
+The local tests give us evidence for the policy direction proposed in Report I: skipping improved timely delivery under a fixed bandwidth cap and reduced the measured memory peak without disconnecting stalled clients. The next step is to turn those improvements into explicit control over bandwidth allocation and retained memory.
 
-The largest remaining implementation tasks are DRR and memory budgets. DRR will let us compare fair bandwidth allocation alone with fair allocation plus skipping under the same cap. For memory, we first need to measure shared retained payloads and per-connection allocations separately, as described in Section 4. We can then set and test limits on bytes retained for each session and for the relay as a whole, and choose a client count that creates meaningful memory pressure.
+DRR will test whether assigning each session a fair byte allowance improves on skipping alone. We will compare DRR, skip, and DRR plus skip under the same cap, measuring each client's share of bandwidth alongside timely delivery and recovery. This will separate the benefit of fair scheduling from the benefit of discarding stale media.
 
-We will prioritize those two questions and moving the policy comparisons to PACE. Encoded video, multiple tracks, and upstream subscription sharing would test how well the approach applies to other workloads; they are further evaluation, rather than prerequisites for the first PACE experiment.
+For memory, we will use the memory ownership audit we did to measure shared retained payloads and per-connection allocations separately, then add byte budgets for sessions and the relay as a whole. With the same workload and client count, success means keeping the measured memory regions within their configured budgets while preserving healthy-client delivery and allowing stalled clients to recover. Increasing the number of stalled clients and varying group size will test where those limits start to matter.
 
-## References
+We will prioritize those two questions and move the policy comparisons to PACE. Encoded video, multiple tracks, and upstream subscription sharing would test how well the approach applies to other workloads; and they’re planned for further evaluation.
+
+References
 
 1. Kumar et al. **PicNIC: Predictable Virtualized NIC.** SIGCOMM 2019. [Paper.](https://natefoster.org/papers/picnic.pdf)
 
