@@ -1,0 +1,3424 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 92f65c0..4c39570 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -1751,6 +1751,7 @@ dependencies = [
+  "moq-native-ietf",
+  "moq-transport",
+  "p256",
++ "quinn",
+  "rcgen",
+  "rustls 0.23.31",
+  "secrecy",
+diff --git a/moq-relay-ietf/Cargo.toml b/moq-relay-ietf/Cargo.toml
+index 4a08799..45a51fd 100644
+--- a/moq-relay-ietf/Cargo.toml
++++ b/moq-relay-ietf/Cargo.toml
+@@ -27,6 +27,7 @@ moq-transport = { path = "../moq-transport", version = "0.16" }
+ moq-native-ietf = { path = "../moq-native-ietf", version = "0.10" }
+ moq-api = { path = "../moq-api", version = "0.2" }
+ web-transport = { workspace = true }
++quinn = { version = "0.11.9", features = ["ring"] }
+ 
+ # Bearer tokens are held in a type that zeroizes on drop and redacts under
+ # Debug. Not optional: the enforcement points compile without `auth-cat`, so
+diff --git a/moq-relay-ietf/src/bin/moq-relay-ietf/main.rs b/moq-relay-ietf/src/bin/moq-relay-ietf/main.rs
+index 9508cb2..f026afc 100644
+--- a/moq-relay-ietf/src/bin/moq-relay-ietf/main.rs
++++ b/moq-relay-ietf/src/bin/moq-relay-ietf/main.rs
+@@ -100,6 +100,39 @@ pub struct Cli {
+     #[arg(long)]
+     pub metrics_addr: Option<net::SocketAddr>,
+ 
++    /// Experimental aggregate outgoing UDP-payload cap, in decimal Mbit/s.
++    /// Includes QUIC control traffic and retransmissions; excludes IP overhead.
++    #[arg(long)]
++    pub egress_mbps: Option<f64>,
++
++    /// Maximum token-bucket burst; identical across experimental policies.
++    #[arg(long, default_value_t = 65536)]
++    pub egress_burst_bytes: usize,
++
++    /// End a subscription if a subgroup remains unacknowledged this long.
++    /// Starts when downstream forwarding observes the subgroup, not at source creation.
++    #[arg(long)]
++    pub max_subgroup_age_ms: Option<u64>,
++
++    /// On expiry, terminate the subscription or skip its pending stale groups.
++    #[arg(long, default_value = "terminate", value_parser = ["terminate", "skip"])]
++    pub subgroup_timeout_action: String,
++
++    /// Shared application stream-byte rate. Identical for FIFO and DRR comparisons.
++    #[arg(long)]
++    pub application_mbps: Option<f64>,
++    #[arg(long, default_value="fifo", value_parser=["fifo", "drr"])]
++    pub scheduler: String,
++    /// Conservative retained payload reservations per subscriber session; 0 disables enforcement.
++    #[arg(long, default_value_t = 0)]
++    pub session_buffer_bytes: usize,
++    /// Shared subgroup payload reservation cap; excludes QUIC and metadata. 0 disables enforcement.
++    #[arg(long, default_value_t = 0)]
++    pub global_buffer_bytes: usize,
++    /// Enforced maximum sum of Object payload sizes in each subgroup.
++    #[arg(long, default_value_t = 0)]
++    pub max_group_bytes: usize,
++
+     /// JSON file of per-scope Common Access Token (CAT) policies.
+     ///
+     /// When set, scopes the file configures require a valid CAT in the
+@@ -128,6 +161,49 @@ async fn main() -> anyhow::Result<()> {
+         .init();
+ 
+     let cli = Cli::parse();
++    let application_rate = if let Some(mbps) = cli.application_mbps {
++        anyhow::ensure!(
++            mbps.is_finite() && mbps >= 0.000008 && mbps < 1e9,
++            "invalid application rate"
++        );
++        Some((mbps * 1_000_000.0 / 8.0) as u64)
++    } else {
++        None
++    };
++    let resources = moq_relay_ietf::resources::Resources::new(
++        application_rate,
++        cli.scheduler == "drr",
++        cli.session_buffer_bytes,
++        cli.global_buffer_bytes,
++        cli.max_group_bytes,
++    )?;
++    let resources = (application_rate.is_some() || cli.max_group_bytes > 0).then_some(resources);
++    anyhow::ensure!(
++        cli.subgroup_timeout_action != "skip" || cli.max_subgroup_age_ms.is_some(),
++        "skip requires --max-subgroup-age-ms"
++    );
++    anyhow::ensure!(
++        cli.max_subgroup_age_ms != Some(0),
++        "subgroup age must be positive"
++    );
++    let egress_rate = if let Some(mbps) = cli.egress_mbps {
++        anyhow::ensure!(
++            mbps.is_finite() && mbps > 0.0,
++            "egress rate must be finite and positive"
++        );
++        let bytes = mbps * 1_000_000.0 / 8.0;
++        anyhow::ensure!(
++            bytes >= 1.0 && bytes < u64::MAX as f64,
++            "egress rate out of range"
++        );
++        anyhow::ensure!(
++            cli.egress_burst_bytes >= 65536,
++            "egress burst must be at least 65536 bytes"
++        );
++        Some(bytes as u64)
++    } else {
++        None
++    };
+ 
+     // Checked before anything else so a relay that cannot enforce the
+     // requested policy never starts listening.
+@@ -227,12 +303,31 @@ async fn main() -> anyhow::Result<()> {
+         )
+     };
+ 
++    // One shared socket bucket limits all connections on this endpoint.
++    // Keep the ordinary endpoint construction untouched when the cap is off.
++    let endpoints = if let Some(rate) = egress_rate {
++        let burst = cli.egress_burst_bytes;
++        let config =
++            moq_native_ietf::quic::Config::new(cli.bind, qlog_dir_for_relay.clone(), tls.clone())?
++                .with_socket_wrapper(move |socket| {
++                    moq_relay_ietf::egress::EgressSocket::wrap(socket, rate, burst)
++                        .expect("validated nonzero egress configuration")
++                });
++        vec![moq_native_ietf::quic::Endpoint::new(config)?]
++    } else {
++        vec![]
++    };
++
+     // Create a QUIC server for media.
+     let relay = Relay::new_with_cache_idle_timeout(
+         RelayConfig {
+             tls: tls.clone(),
+-            bind: Some(cli.bind),
+-            endpoints: vec![],
++            bind: if endpoints.is_empty() {
++                Some(cli.bind)
++            } else {
++                None
++            },
++            endpoints,
+             qlog_dir: qlog_dir_for_relay,
+             mlog_dir: mlog_dir_for_relay,
+             node: cli.node,
+@@ -247,7 +342,10 @@ async fn main() -> anyhow::Result<()> {
+             connection_tagger: None,
+         },
+         Duration::from_secs(cli.cache_idle_timeout),
+-    )?;
++    )?
++    .with_subgroup_timeout(cli.max_subgroup_age_ms.map(Duration::from_millis))
++    .with_subgroup_skip(cli.subgroup_timeout_action == "skip")
++    .with_resources(resources);
+ 
+     if cli.dev {
+         // Create a web server too.
+diff --git a/moq-relay-ietf/src/egress.rs b/moq-relay-ietf/src/egress.rs
+new file mode 100644
+index 0000000..3308249
+--- /dev/null
++++ b/moq-relay-ietf/src/egress.rs
+@@ -0,0 +1,412 @@
++// SPDX-FileCopyrightText: 2026 Cloudflare Inc. and contributors
++// SPDX-License-Identifier: MIT OR Apache-2.0
++
++//! Aggregate UDP-payload service budget, shared by every connection on a socket.
++//!
++//! ACKs, control packets, and retransmissions consume this budget. IP and link
++//! headers do not. This is not a physical-link emulator or a fair/FIFO scheduler.
++//! No packet payload is copied or queued here; Quinn retains blocked transmits.
++
++use std::{
++    future::Future,
++    io::{self, IoSliceMut},
++    net::SocketAddr,
++    pin::Pin,
++    sync::{Arc, Mutex},
++    task::{Context, Poll},
++    time::Duration,
++};
++
++use quinn::{
++    udp::{RecvMeta, Transmit},
++    AsyncUdpSocket, UdpPoller,
++};
++use tokio::time::{Instant, Sleep};
++
++const NANOS_PER_SECOND: u128 = 1_000_000_000;
++
++#[derive(Debug)]
++struct Bucket {
++    credit: u128,
++    updated: Instant,
++    // UdpPoller has no pending-transmit argument. Waiting for the largest
++    // previously throttled datagram avoids waking at every single-byte refill.
++    // A smaller sender may wait longer; no per-connection fairness is promised.
++    readiness_bytes: usize,
++}
++
++/// A Tokio-backed rate limiter for a single shared Quinn UDP socket.
++#[derive(Debug)]
++pub struct EgressSocket {
++    inner: Arc<dyn AsyncUdpSocket>,
++    rate: u64,
++    burst: usize,
++    bucket: Mutex<Bucket>,
++}
++
++impl EgressSocket {
++    /// Start with a full bucket. A 65,536-byte burst admits any normal UDP
++    /// datagram; smaller bursts are allowed but oversized sends fail explicitly.
++    pub fn wrap(
++        inner: Arc<dyn AsyncUdpSocket>,
++        bytes_per_second: u64,
++        burst_bytes: usize,
++    ) -> io::Result<Arc<dyn AsyncUdpSocket>> {
++        if bytes_per_second == 0 || burst_bytes == 0 {
++            return Err(io::Error::new(
++                io::ErrorKind::InvalidInput,
++                "egress rate and burst must be positive",
++            ));
++        }
++        metrics::gauge!("moq_relay_egress_limit_bytes_per_second").set(bytes_per_second as f64);
++        metrics::gauge!("moq_relay_egress_burst_bytes").set(burst_bytes as f64);
++        Ok(Arc::new(Self {
++            inner,
++            rate: bytes_per_second,
++            burst: burst_bytes,
++            bucket: Mutex::new(Bucket {
++                credit: burst_bytes as u128 * NANOS_PER_SECOND,
++                updated: Instant::now(),
++                readiness_bytes: 1,
++            }),
++        }))
++    }
++
++    fn refill(&self, bucket: &mut Bucket, now: Instant) {
++        let elapsed = now.duration_since(bucket.updated).as_nanos();
++        bucket.credit = bucket
++            .credit
++            .saturating_add(elapsed.saturating_mul(self.rate as u128))
++            .min(self.burst as u128 * NANOS_PER_SECOND);
++        bucket.updated = now;
++    }
++
++    fn ready_deadline(&self) -> io::Result<Option<Instant>> {
++        let mut bucket = self
++            .bucket
++            .lock()
++            .map_err(|_| io::Error::other("egress bucket lock poisoned"))?;
++        let now = Instant::now();
++        self.refill(&mut bucket, now);
++        let required = bucket.readiness_bytes as u128 * NANOS_PER_SECOND;
++        if bucket.credit >= required {
++            return Ok(None);
++        }
++        let nanos = (required - bucket.credit).div_ceil(self.rate as u128);
++        // readiness_bytes never exceeds a legal datagram, so this is at most
++        // 65,535 seconds even at one byte/second. Ceil preserves low-rate wakes.
++        let delay = Duration::new(
++            (nanos / NANOS_PER_SECOND) as u64,
++            (nanos % NANOS_PER_SECOND) as u32,
++        );
++        Ok(Some(now + delay))
++    }
++}
++
++impl AsyncUdpSocket for EgressSocket {
++    fn create_io_poller(self: Arc<Self>) -> Pin<Box<dyn UdpPoller>> {
++        let inner = self.inner.clone().create_io_poller();
++        Box::pin(EgressPoller {
++            socket: self,
++            inner,
++            sleep: None,
++        })
++    }
++
++    fn try_send(&self, transmit: &Transmit<'_>) -> io::Result<()> {
++        let bytes = transmit.contents.len();
++        if bytes > self.burst || bytes > u16::MAX as usize {
++            return Err(io::Error::new(
++                io::ErrorKind::InvalidInput,
++                "UDP transmit exceeds egress burst or datagram size",
++            ));
++        }
++        if transmit.segment_size.is_some_and(|size| size < bytes) {
++            return Err(io::Error::new(
++                io::ErrorKind::InvalidInput,
++                "egress shaper does not accept segmented UDP transmits",
++            ));
++        }
++        let mut bucket = self
++            .bucket
++            .lock()
++            .map_err(|_| io::Error::other("egress bucket lock poisoned"))?;
++        self.refill(&mut bucket, Instant::now());
++        let charge = bytes as u128 * NANOS_PER_SECOND;
++        if bucket.credit < charge {
++            bucket.readiness_bytes = bucket.readiness_bytes.max(bytes);
++            metrics::counter!("moq_relay_egress_throttled_total").increment(1);
++            return Err(io::ErrorKind::WouldBlock.into());
++        }
++        // Nonblocking send under the short mutex makes successful sends and
++        // charges atomic across connections. Failed OS sends spend no credit.
++        self.inner.try_send(transmit)?;
++        bucket.credit -= charge;
++        metrics::counter!("moq_relay_egress_udp_bytes_total").increment(bytes as u64);
++        Ok(())
++    }
++
++    fn poll_recv(
++        &self,
++        cx: &mut Context<'_>,
++        bufs: &mut [IoSliceMut<'_>],
++        meta: &mut [RecvMeta],
++    ) -> Poll<io::Result<usize>> {
++        self.inner.poll_recv(cx, bufs, meta)
++    }
++
++    fn local_addr(&self) -> io::Result<SocketAddr> {
++        self.inner.local_addr()
++    }
++
++    fn max_transmit_segments(&self) -> usize {
++        1
++    }
++
++    fn max_receive_segments(&self) -> usize {
++        self.inner.max_receive_segments()
++    }
++
++    fn may_fragment(&self) -> bool {
++        self.inner.may_fragment()
++    }
++}
++
++#[derive(Debug)]
++struct EgressPoller {
++    socket: Arc<EgressSocket>,
++    inner: Pin<Box<dyn UdpPoller>>,
++    sleep: Option<Pin<Box<Sleep>>>,
++}
++
++impl UdpPoller for EgressPoller {
++    fn poll_writable(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
++        let this = self.get_mut();
++        // Register the OS wake even while rate-blocked. Every Quinn connection
++        // owns a distinct inner poller and timer, so no task overwrites another.
++        let inner = this.inner.as_mut().poll_writable(cx);
++        if let Poll::Ready(Err(error)) = inner {
++            return Poll::Ready(Err(error));
++        }
++        match this.socket.ready_deadline()? {
++            None => {
++                this.sleep = None;
++                inner
++            }
++            Some(deadline) => {
++                let timer = this
++                    .sleep
++                    .get_or_insert_with(|| Box::pin(tokio::time::sleep_until(deadline)));
++                timer.as_mut().reset(deadline);
++                if timer.as_mut().poll(cx).is_ready() {
++                    // The deadline can pass between accounting and registration.
++                    // Re-poll instead of losing that wake; the next accounting
++                    // pass decides whether another connection spent the credit.
++                    cx.waker().wake_by_ref();
++                }
++                Poll::Pending
++            }
++        }
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use futures::{future::poll_fn, task::AtomicWaker};
++    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
++
++    #[derive(Debug)]
++    struct FakeSocket {
++        writable: AtomicBool,
++        sent: AtomicU64,
++        waiters: Mutex<Vec<Arc<AtomicWaker>>>,
++    }
++
++    impl FakeSocket {
++        fn new() -> Arc<Self> {
++            Arc::new(Self {
++                writable: AtomicBool::new(true),
++                sent: AtomicU64::new(0),
++                waiters: Mutex::new(Vec::new()),
++            })
++        }
++
++        fn set_writable(&self, value: bool) {
++            self.writable.store(value, Ordering::SeqCst);
++            if value {
++                for waiter in self.waiters.lock().unwrap().iter() {
++                    waiter.wake();
++                }
++            }
++        }
++    }
++
++    impl AsyncUdpSocket for FakeSocket {
++        fn create_io_poller(self: Arc<Self>) -> Pin<Box<dyn UdpPoller>> {
++            let waker = Arc::new(AtomicWaker::new());
++            self.waiters.lock().unwrap().push(waker.clone());
++            Box::pin(FakePoller {
++                socket: self,
++                waker,
++            })
++        }
++
++        fn try_send(&self, transmit: &Transmit<'_>) -> io::Result<()> {
++            if !self.writable.load(Ordering::SeqCst) {
++                return Err(io::ErrorKind::WouldBlock.into());
++            }
++            self.sent
++                .fetch_add(transmit.contents.len() as u64, Ordering::SeqCst);
++            Ok(())
++        }
++
++        fn poll_recv(
++            &self,
++            _cx: &mut Context<'_>,
++            _bufs: &mut [IoSliceMut<'_>],
++            _meta: &mut [RecvMeta],
++        ) -> Poll<io::Result<usize>> {
++            Poll::Pending
++        }
++
++        fn local_addr(&self) -> io::Result<SocketAddr> {
++            Ok("127.0.0.1:4443".parse().unwrap())
++        }
++    }
++
++    #[derive(Debug)]
++    struct FakePoller {
++        socket: Arc<FakeSocket>,
++        waker: Arc<AtomicWaker>,
++    }
++
++    impl UdpPoller for FakePoller {
++        fn poll_writable(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
++            self.waker.register(cx.waker());
++            if self.socket.writable.load(Ordering::SeqCst) {
++                Poll::Ready(Ok(()))
++            } else {
++                Poll::Pending
++            }
++        }
++    }
++
++    fn transmit(contents: &[u8]) -> Transmit<'_> {
++        Transmit {
++            destination: "127.0.0.1:4444".parse().unwrap(),
++            ecn: None,
++            contents,
++            segment_size: None,
++            src_ip: None,
++        }
++    }
++
++    #[tokio::test(start_paused = true)]
++    async fn aggregate_envelope_and_fractional_refills() {
++        let inner = FakeSocket::new();
++        let socket = EgressSocket::wrap(inner.clone(), 100, 100).unwrap();
++        socket.try_send(&transmit(&[0; 100])).unwrap();
++        assert_eq!(
++            socket.try_send(&transmit(&[0])).unwrap_err().kind(),
++            io::ErrorKind::WouldBlock
++        );
++        for step in 1..=100 {
++            tokio::time::advance(Duration::from_millis(10)).await;
++            socket.try_send(&transmit(&[0])).unwrap();
++            assert!(inner.sent.load(Ordering::SeqCst) <= 100 + step);
++            assert!(socket.try_send(&transmit(&[0])).is_err());
++        }
++        assert_eq!(inner.sent.load(Ordering::SeqCst), 200);
++    }
++
++    #[tokio::test(start_paused = true)]
++    async fn failed_inner_send_spends_no_credit() {
++        let inner = FakeSocket::new();
++        let socket = EgressSocket::wrap(inner.clone(), 1, 100).unwrap();
++        inner.set_writable(false);
++        assert_eq!(
++            socket.try_send(&transmit(&[0; 100])).unwrap_err().kind(),
++            io::ErrorKind::WouldBlock
++        );
++        assert_eq!(inner.sent.load(Ordering::SeqCst), 0);
++        inner.set_writable(true);
++        socket.try_send(&transmit(&[0; 100])).unwrap();
++        assert_eq!(inner.sent.load(Ordering::SeqCst), 100);
++    }
++
++    #[tokio::test(start_paused = true)]
++    async fn low_rate_timer_and_inner_readiness_both_wake() {
++        let inner = FakeSocket::new();
++        let socket = EgressSocket::wrap(inner.clone(), 1, 10).unwrap();
++        socket.try_send(&transmit(&[0; 10])).unwrap();
++        assert!(socket.try_send(&transmit(&[0; 10])).is_err());
++        let mut poller = socket.clone().create_io_poller();
++        inner.set_writable(false);
++        let task =
++            tokio::spawn(async move { poll_fn(|cx| poller.as_mut().poll_writable(cx)).await });
++        tokio::task::yield_now().await;
++        tokio::time::advance(Duration::from_secs(9)).await;
++        assert!(!task.is_finished());
++        tokio::time::advance(Duration::from_secs(1)).await;
++        tokio::task::yield_now().await;
++        assert!(!task.is_finished());
++        inner.set_writable(true);
++        task.await.unwrap().unwrap();
++        socket.try_send(&transmit(&[0; 10])).unwrap();
++    }
++
++    #[tokio::test(start_paused = true)]
++    async fn invalid_or_oversized_transmit_fails_without_waiting() {
++        let inner = FakeSocket::new();
++        assert!(EgressSocket::wrap(inner.clone(), 0, 100).is_err());
++        assert!(EgressSocket::wrap(inner.clone(), 100, 0).is_err());
++        let socket = EgressSocket::wrap(inner.clone(), 1, 10).unwrap();
++        assert_eq!(socket.max_transmit_segments(), 1);
++        assert_eq!(
++            socket.try_send(&transmit(&[0; 11])).unwrap_err().kind(),
++            io::ErrorKind::InvalidInput
++        );
++        let mut segmented = transmit(&[0; 10]);
++        segmented.segment_size = Some(5);
++        assert_eq!(
++            socket.try_send(&segmented).unwrap_err().kind(),
++            io::ErrorKind::InvalidInput
++        );
++        socket.try_send(&transmit(&[0; 10])).unwrap();
++    }
++
++    #[tokio::test(start_paused = true)]
++    async fn multiple_pollers_share_one_sustained_budget() {
++        let inner = FakeSocket::new();
++        let socket = EgressSocket::wrap(inner.clone(), 100, 10).unwrap();
++        let start = Instant::now();
++        let mut tasks = Vec::new();
++        for _ in 0..4 {
++            let socket = socket.clone();
++            tasks.push(tokio::spawn(async move {
++                let mut poller = socket.clone().create_io_poller();
++                for _ in 0..5 {
++                    loop {
++                        match socket.try_send(&transmit(&[0; 10])) {
++                            Ok(()) => break,
++                            Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
++                                poll_fn(|cx| poller.as_mut().poll_writable(cx))
++                                    .await
++                                    .unwrap();
++                            }
++                            Err(error) => panic!("unexpected send error: {error}"),
++                        }
++                    }
++                }
++            }));
++        }
++        for task in tasks {
++            task.await.unwrap();
++        }
++        let elapsed = Instant::now().duration_since(start).as_nanos();
++        assert_eq!(inner.sent.load(Ordering::SeqCst), 200);
++        assert!(elapsed >= 1_900_000_000);
++        assert!(200 * NANOS_PER_SECOND <= 10 * NANOS_PER_SECOND + 100 * elapsed);
++    }
++}
+diff --git a/moq-relay-ietf/src/lib.rs b/moq-relay-ietf/src/lib.rs
+index d98f9eb..8d14e88 100644
+--- a/moq-relay-ietf/src/lib.rs
++++ b/moq-relay-ietf/src/lib.rs
+@@ -89,6 +89,7 @@ mod auth;
+ mod consumer;
+ mod coordinator;
+ mod covering_prefix_set;
++pub mod egress;
+ mod interest;
+ mod local;
+ pub mod metrics;
+@@ -112,3 +113,6 @@ pub use relay::*;
+ pub use remote::RemoteManager;
+ pub use session::*;
+ pub use web::*;
++
++pub mod resources;
++pub mod scheduler;
+diff --git a/moq-relay-ietf/src/producer.rs b/moq-relay-ietf/src/producer.rs
+index 57d7754..8932c17 100644
+--- a/moq-relay-ietf/src/producer.rs
++++ b/moq-relay-ietf/src/producer.rs
+@@ -36,6 +36,12 @@ pub struct Producer {
+     /// Token authorization state. Internal relay peers and sessions in scopes
+     /// without a policy carry `None`, permitting every request.
+     auth: Option<SessionAuth>,
++    subgroup_timeout: Option<Duration>,
++    subgroup_skip: bool,
++    resources: Option<(
++        Option<moq_transport::session::SharedWritePolicy>,
++        Option<(moq_transport::serve::ByteBudget, usize)>,
++    )>,
+ }
+ 
+ /// Why the wait for upstream readiness ended without the subscription being
+@@ -83,9 +89,72 @@ impl Producer {
+             upstream_namespaces,
+             context,
+             auth,
++            subgroup_timeout: None,
++            subgroup_skip: false,
++            resources: None,
+         }
+     }
+ 
++    /// Select a local forwarding-lifetime policy for downstream subscriptions.
++    pub(crate) fn with_subgroup_timeout(mut self, timeout: Option<Duration>) -> Self {
++        self.subgroup_timeout = timeout;
++        self
++    }
++
++    pub(crate) fn with_subgroup_skip(mut self, enabled: bool) -> Self {
++        self.subgroup_skip = enabled;
++        self
++    }
++
++    pub(crate) fn with_resources(
++        mut self,
++        resources: Option<&crate::resources::Resources>,
++    ) -> Self {
++        self.resources = resources.map(|r| r.session(self.publisher.session_id().to_string()));
++        self
++    }
++
++    async fn serve_track(
++        &self,
++        subscribed: Subscribed,
++        track: TrackReader,
++    ) -> Result<(), SessionError> {
++        let subscription_id = subscribed.id;
++        // Draft-16 9.2.2.2 permits early abandonment only when a delivery
++        // timeout is specified. This local group timer is intentionally not a
++        // full implementation of the per-Object header-receipt deadline.
++        let permitted_timeout = subscribed.params.get(0x02).and_then(|kv| match kv.value {
++            moq_transport::coding::Value::IntValue(ms) if ms > 0 => Some(Duration::from_millis(ms)),
++            _ => None,
++        });
++        let skip = self.subgroup_skip && permitted_timeout.is_some();
++        let timeout = match (self.subgroup_timeout, permitted_timeout) {
++            (Some(local), Some(peer)) if skip => Some(local.min(peer)),
++            (configured, _) => configured,
++        };
++        let (policy, budget) = self.resources.clone().unwrap_or_default();
++        let result = subscribed
++            .with_resources(policy, budget)
++            .with_subgroup_timeout(timeout)
++            .with_subgroup_skip(skip)
++            .with_subgroup_resync_observer(std::sync::Arc::new(|abandoned| {
++                metrics::counter!("moq_relay_live_resync_total").increment(1);
++                metrics::counter!("moq_relay_subgroups_abandoned_total")
++                    .increment(abandoned as u64);
++            }))
++            .serve(track)
++            .await;
++        if matches!(&result, Err(SessionError::Serve(ServeError::Closed(code)))
++            if *code == moq_transport::message::PublishDoneCode::TooFarBehind as u64)
++        {
++            // Count terminal subscription outcomes, not individual expired groups.
++            metrics::counter!("moq_relay_too_far_behind_total").increment(1);
++            tracing::info!(session_id = %self.publisher.session_id(), subscription_id,
++                "subscription terminated: too far behind");
++        }
++        result
++    }
++
+     /// Send PUBLISH_NAMESPACE for a set of tracks to the remote peer.
+     pub async fn publish_namespace(&mut self, tracks: TracksReader) -> Result<(), SessionError> {
+         self.publisher.publish_namespace(tracks).await
+@@ -175,6 +244,13 @@ impl Producer {
+     }
+ 
+     async fn serve_fetch(self, fetch: FetchRequested) -> Result<(), anyhow::Error> {
++        if self.resources.is_some() {
++            fetch.reject(
++                RequestErrorCode::NotSupported,
++                "resource policy supports live subgroup subscriptions",
++            )?;
++            return Ok(());
++        }
+         let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+         let standalone = tokio::select! {
+             biased;
+@@ -291,6 +367,21 @@ impl Producer {
+             return Err(err.into());
+         }
+ 
++        // Charge before acquiring any TrackReader or waiting for SUBSCRIBE_OK.
++        // This cache slot covers the latest group kept alive by the track handle.
++        let _cache_lease = if let Some((_, Some((budget, maximum)))) = &self.resources {
++            match budget.try_reserve(*maximum) {
++                Ok(lease) => Some(lease),
++                Err(_) => {
++                    let err = ServeError::Closed(RequestErrorCode::Uninterested as u64);
++                    subscribed.close(err.clone())?;
++                    return Err(err.into());
++                }
++            }
++        } else {
++            None
++        };
++
+         // Local lookup order inside Locals:
+         // 1. actual FullTrackName -> TrackReader media cache
+         // 2. PUBLISH_NAMESPACE route source, which triggers upstream SUBSCRIBE
+@@ -340,9 +431,14 @@ impl Producer {
+                 }
+             }
+ 
+-            return Ok(subscribed.serve(local.reader).await?);
++            return Ok(self.serve_track(subscribed, local.reader).await?);
+         }
+ 
++        if self.resources.is_some() {
++            let err = ServeError::Closed(RequestErrorCode::NotSupported as u64);
++            subscribed.close(err.clone())?;
++            return Err(err.into());
++        }
+         // Check remote tracks after local exact tracks and namespace route sources.
+         match self
+             .remotes
+@@ -360,7 +456,7 @@ impl Producer {
+                     // Held until serving finishes; the cross-relay subscription is
+                     // released once the last guard for this track drops.
+                     let _interest_guard = interest_guard;
+-                    return Ok(subscribed.serve(track).await?);
++                    return Ok(self.serve_track(subscribed, track).await?);
+                 }
+             }
+             Err(e) => {
+@@ -435,6 +531,13 @@ impl Producer {
+             return Err(anyhow::anyhow!("unauthorized subscribe_namespace"));
+         }
+ 
++        if self.resources.is_some() {
++            subscribed_namespace.reject(
++                RequestErrorCode::NotSupported as u64,
++                "resource policy requires explicit live SUBSCRIBE",
++            )?;
++            return Ok(());
++        }
+         let wants_namespace = wants_namespace(subscribed_namespace.subscribe_options);
+         let wants_publish = wants_publish(subscribed_namespace.subscribe_options);
+         let namespace_changes = self.locals.subscribe_namespace_changes();
+diff --git a/moq-relay-ietf/src/relay.rs b/moq-relay-ietf/src/relay.rs
+index 1967967..fe3bf83 100644
+--- a/moq-relay-ietf/src/relay.rs
++++ b/moq-relay-ietf/src/relay.rs
+@@ -246,6 +246,9 @@ pub struct Relay {
+     /// Per-scope authorization policy, resolved from the coordinator and
+     /// cached. Shared by every connection task.
+     authorizer: Arc<ScopeAuthorizer>,
++    subgroup_timeout: Option<Duration>,
++    subgroup_skip: bool,
++    resources: Option<crate::resources::Resources>,
+ }
+ 
+ impl Relay {
+@@ -320,9 +323,30 @@ impl Relay {
+             upstream_namespaces,
+             upstream_namespaces_runner,
+             authorizer,
++            subgroup_timeout: None,
++            subgroup_skip: false,
++            resources: None,
+         })
+     }
+ 
++    /// Bound subgroup forwarding lifetime for public downstream subscribers.
++    /// Internal relay peers retain their existing behavior.
++    pub fn with_subgroup_timeout(mut self, timeout: Option<Duration>) -> Self {
++        self.subgroup_timeout = timeout;
++        self
++    }
++
++    /// Keep a subscription open after abandoning stale subgroup streams.
++    pub fn with_subgroup_skip(mut self, enabled: bool) -> Self {
++        self.subgroup_skip = enabled;
++        self
++    }
++
++    pub fn with_resources(mut self, resources: Option<crate::resources::Resources>) -> Self {
++        self.resources = resources;
++        self
++    }
++
+     /// Run the relay server.
+     pub async fn run(self) -> anyhow::Result<()> {
+         let Self {
+@@ -332,6 +356,9 @@ impl Relay {
+             upstream_namespaces,
+             upstream_namespaces_runner,
+             authorizer,
++            subgroup_timeout,
++            subgroup_skip,
++            resources,
+         } = self;
+ 
+         let RelayConfig {
+@@ -344,6 +371,10 @@ impl Relay {
+             ..
+         } = config;
+ 
++        anyhow::ensure!(
++            resources.is_none() || announce_url.is_none(),
++            "resource policy currently requires a standalone relay without --announce"
++        );
+         let run_result = async {
+             let mut tasks = FuturesUnordered::new();
+             tasks.push(
+@@ -539,6 +570,7 @@ impl Relay {
+                         let upstream_namespaces = upstream_namespaces.clone();
+                         let connection_tagger = connection_tagger.clone();
+                         let authorizer = authorizer.clone();
++                        let resources = resources.clone();
+ 
+                         // Spawn a new task to handle the connection
+                         tasks.push(async move {
+@@ -718,11 +750,14 @@ impl Relay {
+                             // to the Session's reject fields so unauthorized messages get
+                             // an explicit error response instead of being silently ignored.
+                             let (producer, reject_subscribes) = if can_subscribe {
+-                                (publisher.map(|publisher| Producer::new_with_upstream_namespaces(publisher, locals.clone(), remotes.clone(), upstream_namespaces, context.clone(), session_auth.clone())), None)
++                                (publisher.map(|publisher| Producer::new_with_upstream_namespaces(publisher, locals.clone(), remotes.clone(), upstream_namespaces, context.clone(), session_auth.clone()).with_subgroup_timeout(if context.interface == SessionInterface::Internal { None } else { subgroup_timeout }).with_subgroup_skip(context.interface != SessionInterface::Internal && subgroup_skip).with_resources(if context.interface == SessionInterface::Internal { None } else { resources.as_ref() })), None)
+                             } else {
+                                 (None, publisher)
+                             };
+ 
++                            if let (Some(resources), Some(subscriber)) = (&resources, &subscriber) {
++                                resources.receiving(subscriber);
++                            }
+                             let (consumer, reject_publishes) = if can_publish {
+                                 (subscriber.map(|subscriber| Consumer::new(subscriber, locals, coordinator, remotes.clone(), forward, context.clone(), session_auth)), None)
+                             } else {
+diff --git a/moq-relay-ietf/src/resources.rs b/moq-relay-ietf/src/resources.rs
+new file mode 100644
+index 0000000..6542de3
+--- /dev/null
++++ b/moq-relay-ietf/src/resources.rs
+@@ -0,0 +1,152 @@
++// SPDX-FileCopyrightText: 2026 MoQT Relay Fairness project contributors
++// SPDX-License-Identifier: MIT OR Apache-2.0
++
++use crate::scheduler::Scheduler;
++use moq_transport::{
++    serve::ByteBudget,
++    session::{SharedWritePolicy, Subscriber},
++};
++use std::sync::Arc;
++
++#[derive(Clone)]
++pub struct Resources {
++    scheduler: Option<Scheduler>,
++    global: Option<ByteBudget>,
++    session_limit: usize,
++    max_group: usize,
++}
++impl Resources {
++    pub fn new(
++        rate: Option<u64>,
++        drr: bool,
++        session_limit: usize,
++        global_limit: usize,
++        max_group: usize,
++    ) -> anyhow::Result<Self> {
++        anyhow::ensure!(rate != Some(0), "application rate must be positive");
++        anyhow::ensure!(!drr || rate.is_some(), "DRR requires --application-mbps");
++        anyhow::ensure!(
++            session_limit == 0 || max_group > 0,
++            "session budget requires --max-group-bytes"
++        );
++        anyhow::ensure!(
++            global_limit == 0 || max_group > 0,
++            "global budget requires --max-group-bytes"
++        );
++        anyhow::ensure!(
++            session_limit == 0
++                || max_group
++                    .checked_mul(2)
++                    .is_some_and(|minimum| session_limit >= minimum),
++            "session budget must fit a cache slot and one forwarding group"
++        );
++        anyhow::ensure!(
++            global_limit == 0 || global_limit >= max_group,
++            "global budget must fit a group"
++        );
++        let global = (max_group > 0).then(|| {
++            ByteBudget::new(global_limit).with_observer(Arc::new(|current, peak, rejections| {
++                metrics::gauge!("moq_relay_global_reserved_bytes").set(current as f64);
++                metrics::gauge!("moq_relay_global_peak_reserved_bytes").set(peak as f64);
++                metrics::gauge!("moq_relay_global_admission_rejections").set(rejections as f64);
++            }))
++        });
++        Ok(Self {
++            scheduler: rate.map(|r| Scheduler::new(r, drr)),
++            global,
++            session_limit,
++            max_group,
++        })
++    }
++    pub fn session(&self, id: String) -> (Option<SharedWritePolicy>, Option<(ByteBudget, usize)>) {
++        let policy = self.scheduler.as_ref().map(|s| s.session(id.clone()));
++        // Track unbounded baseline reservations too, whenever a group bound is set.
++        let budget = (self.max_group > 0).then(|| {
++            let b = ByteBudget::new(self.session_limit).with_observer(Arc::new(
++                move |current, peak, rejections| {
++                    metrics::gauge!("moq_relay_session_reserved_bytes", "session"=>id.clone())
++                        .set(current as f64);
++                    metrics::gauge!("moq_relay_session_peak_reserved_bytes", "session"=>id.clone())
++                        .set(peak as f64);
++                    metrics::gauge!("moq_relay_session_budget_rejections", "session"=>id.clone())
++                        .set(rejections as f64);
++                },
++            ));
++            (b, self.max_group)
++        });
++        (policy, budget)
++    }
++    pub fn receiving(&self, subscriber: &Subscriber) {
++        if self.max_group > 0 {
++            subscriber.set_payload_budget(self.max_group, self.global.clone());
++        }
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn configuration_cannot_claim_a_cap_without_bounded_groups() {
++        assert!(Resources::new(None, false, 100, 0, 0).is_err());
++        assert!(Resources::new(None, false, 0, 100, 0).is_err());
++        assert!(Resources::new(None, false, 199, 0, 100).is_err());
++        assert!(Resources::new(None, false, 0, 99, 100).is_err());
++        assert!(Resources::new(None, true, 0, 0, 0).is_err());
++        assert!(Resources::new(Some(0), false, 0, 0, 0).is_err());
++        assert!(Resources::new(None, false, usize::MAX, 0, usize::MAX).is_err());
++        assert!(Resources::new(None, false, 200, 100, 100).is_ok());
++    }
++
++    #[test]
++    fn two_subscriptions_share_one_session_budget_but_not_another_sessions_budget() {
++        let resources = Resources::new(None, false, 300, 1000, 100).unwrap();
++        // Producer constructs this session handle once, then clones it for
++        // subscriptions. Each subscription needs a latest-cache slot and an
++        // active-group slot; allocating them independently must not reset it.
++        let (_, first) = resources.session("first".into());
++        let (session, maximum) = first.unwrap();
++        let second_subscription = session.clone();
++        let first_cache = session.try_reserve(maximum).unwrap();
++        let first_group = session.try_reserve(maximum).unwrap();
++        let second_cache = second_subscription.try_reserve(maximum).unwrap();
++        assert!(second_subscription.try_reserve(maximum).is_err());
++        assert_eq!(session.current(), 300);
++        assert_eq!(session.rejections(), 1);
++        let (_, other) = resources.session("other".into());
++        let (other, _) = other.unwrap();
++        let other_cache = other.try_reserve(maximum).unwrap();
++        let other_group = other.try_reserve(maximum).unwrap();
++        assert_eq!(other.current(), 200);
++        drop(first_group);
++        let recovered_group = second_subscription.try_reserve(maximum).unwrap();
++        assert_eq!(session.peak(), 300);
++        drop((first_cache, second_cache, recovered_group));
++        assert_eq!(session.current(), 0);
++        assert_eq!(other.current(), 200);
++        drop((other_cache, other_group));
++        assert_eq!(other.current(), 0);
++    }
++
++    #[test]
++    fn global_admission_and_session_reference_accounting_are_separate() {
++        let resources = Resources::new(None, false, 200, 100, 100).unwrap();
++        let global = resources.global.as_ref().unwrap();
++        let shared_group = Arc::new(global.try_reserve(100).unwrap());
++        let another_reader = shared_group.clone();
++        let (_, session_a) = resources.session("a".into());
++        let (_, session_b) = resources.session("b".into());
++        let (session_a, maximum) = session_a.unwrap();
++        let (session_b, _) = session_b.unwrap();
++        let first_reference = session_a.try_reserve(maximum).unwrap();
++        let second_reference = session_b.try_reserve(maximum).unwrap();
++        assert_eq!(global.current(), 100);
++        assert_eq!(session_a.current() + session_b.current(), 200);
++        assert!(global.try_reserve(100).is_err());
++        drop((shared_group, first_reference));
++        assert_eq!(global.current(), 100);
++        drop((another_reader, second_reference));
++        assert_eq!(global.current(), 0);
++    }
++}
+diff --git a/moq-relay-ietf/src/scheduler.rs b/moq-relay-ietf/src/scheduler.rs
+new file mode 100644
+index 0000000..6240d0d
+--- /dev/null
++++ b/moq-relay-ietf/src/scheduler.rs
+@@ -0,0 +1,378 @@
++// SPDX-FileCopyrightText: 2026 MoQT Relay Fairness project contributors
++// SPDX-License-Identifier: MIT OR Apache-2.0
++
++//! Application-byte DRR. The transport is polled without waiting while a turn
++//! is held; a blocked stream becomes eligible again only on its transport wake.
++use futures::task::{waker, ArcWake};
++use moq_transport::session::{
++    ScheduledWrite, SessionError, SharedWritePolicy, WriteAttempt, WritePolicy,
++};
++use std::{
++    collections::{BTreeMap, VecDeque},
++    future::Future,
++    pin::Pin,
++    sync::{
++        atomic::{AtomicBool, Ordering},
++        Arc, Mutex,
++    },
++    task::{Context, Poll, Waker},
++};
++use tokio::time::{Duration, Instant, Sleep};
++
++const CHUNK: usize = 8192;
++const QUANTUM: usize = 16384;
++#[derive(Clone)]
++pub struct Scheduler {
++    state: Arc<Mutex<State>>,
++}
++struct State {
++    drr: bool,
++    rate: f64,
++    tokens: f64,
++    burst: f64,
++    last: Instant,
++    timer: Option<Pin<Box<Sleep>>>,
++    next: u64,
++    sequence: u64,
++    requests: BTreeMap<u64, Request>,
++    flows: BTreeMap<String, Flow>,
++    ring: VecDeque<String>,
++}
++struct Flow {
++    deficit: usize,
++    started: bool,
++}
++struct Request {
++    session: String,
++    priority: u16,
++    remaining: usize,
++    ready: Arc<AtomicBool>,
++    sequence: u64,
++    wake: Waker,
++}
++struct SessionPolicy {
++    scheduler: Scheduler,
++    session: String,
++}
++struct StreamPolicy {
++    scheduler: Scheduler,
++    session: String,
++    priority: u16,
++    id: u64,
++}
++struct TransportWake {
++    ready: Arc<AtomicBool>,
++    task: Waker,
++}
++impl ArcWake for TransportWake {
++    fn wake_by_ref(this: &Arc<Self>) {
++        // Transport may wake synchronously while being polled. Never take the
++        // scheduler mutex here, or a blocked write can deadlock every session.
++        this.ready.store(true, Ordering::Release);
++        this.task.wake_by_ref();
++    }
++}
++impl State {
++    fn rotate(&mut self) {
++        if let Some(key) = self.ring.pop_front() {
++            self.ring.push_back(key);
++        }
++    }
++    fn select(&mut self) -> Option<u64> {
++        if !self.drr {
++            return self
++                .requests
++                .iter()
++                .filter(|(_, r)| r.ready.load(Ordering::Acquire) && r.remaining > 0)
++                .min_by_key(|(_, r)| r.sequence)
++                .map(|(id, _)| *id);
++        }
++        for _ in 0..self.ring.len() * 2 {
++            let key = self.ring.front()?.clone();
++            let choice = self
++                .requests
++                .iter()
++                .filter(|(_, r)| {
++                    r.session == key && r.ready.load(Ordering::Acquire) && r.remaining > 0
++                })
++                .min_by_key(|(_, r)| (r.priority, r.sequence))
++                .map(|(id, r)| (*id, r.remaining.min(CHUNK)));
++            let flow = self.flows.get_mut(&key).unwrap();
++            let Some((id, size)) = choice else {
++                self.rotate();
++                continue;
++            };
++            if !flow.started {
++                flow.deficit += QUANTUM;
++                flow.started = true;
++            }
++            if flow.deficit >= size {
++                return Some(id);
++            }
++            flow.started = false;
++            self.rotate();
++        }
++        None
++    }
++    fn wake_next(&mut self) {
++        if let Some(id) = self.select() {
++            self.requests[&id].wake.wake_by_ref();
++        }
++    }
++    fn remove(&mut self, id: u64) {
++        if let Some(r) = self.requests.remove(&id) {
++            if !self.requests.values().any(|x| x.session == r.session) {
++                self.flows.remove(&r.session);
++                self.ring.retain(|s| s != &r.session);
++            }
++        }
++        self.wake_next();
++    }
++}
++impl Scheduler {
++    pub fn new(bytes_per_second: u64, drr: bool) -> Self {
++        assert!(bytes_per_second > 0);
++        Self {
++            state: Arc::new(Mutex::new(State {
++                drr,
++                rate: bytes_per_second as f64,
++                tokens: QUANTUM as f64,
++                burst: QUANTUM as f64,
++                last: Instant::now(),
++                timer: None,
++                next: 0,
++                sequence: 0,
++                requests: BTreeMap::new(),
++                flows: BTreeMap::new(),
++                ring: VecDeque::new(),
++            })),
++        }
++    }
++    pub fn session(&self, session: String) -> SharedWritePolicy {
++        Arc::new(SessionPolicy {
++            scheduler: self.clone(),
++            session,
++        })
++    }
++}
++impl WritePolicy for SessionPolicy {
++    fn stream(&self, priority: u16) -> Box<dyn ScheduledWrite> {
++        let mut state = self.scheduler.state.lock().unwrap();
++        let id = state.next;
++        state.next += 1;
++        Box::new(StreamPolicy {
++            scheduler: self.scheduler.clone(),
++            session: self.session.clone(),
++            priority,
++            id,
++        })
++    }
++}
++impl ScheduledWrite for StreamPolicy {
++    fn poll_write(
++        &mut self,
++        cx: &mut Context<'_>,
++        available: usize,
++        attempt: &mut WriteAttempt<'_>,
++    ) -> Poll<Result<usize, SessionError>> {
++        if available == 0 {
++            return Poll::Ready(Ok(0));
++        }
++        let mut state = self.scheduler.state.lock().unwrap();
++        let sequence = state.sequence;
++        state.sequence += 1;
++        if !state.flows.contains_key(&self.session) {
++            state.ring.push_back(self.session.clone());
++            state.flows.insert(
++                self.session.clone(),
++                Flow {
++                    deficit: 0,
++                    started: false,
++                },
++            );
++        }
++        let req = state.requests.entry(self.id).or_insert_with(|| Request {
++            session: self.session.clone(),
++            priority: self.priority,
++            remaining: available,
++            ready: Arc::new(AtomicBool::new(true)),
++            sequence,
++            wake: cx.waker().clone(),
++        });
++        if req.remaining == 0 {
++            req.ready.store(true, Ordering::Release);
++            req.sequence = sequence;
++        }
++        req.remaining = available;
++        req.wake = cx.waker().clone();
++        if state.select() != Some(self.id) {
++            state.wake_next();
++            return Poll::Pending;
++        }
++        let now = Instant::now();
++        state.tokens = (state.tokens + now.duration_since(state.last).as_secs_f64() * state.rate)
++            .min(state.burst);
++        state.last = now;
++        let size = available.min(CHUNK);
++        if state.tokens < size as f64 {
++            let deadline = now + Duration::from_secs_f64((size as f64 - state.tokens) / state.rate);
++            let timer = state
++                .timer
++                .get_or_insert_with(|| Box::pin(tokio::time::sleep_until(deadline)));
++            timer.as_mut().reset(deadline);
++            let _ = timer.as_mut().poll(cx);
++            return Poll::Pending;
++        }
++        let ready = state.requests[&self.id].ready.clone();
++        ready.store(false, Ordering::Release);
++        let transport_waker = waker(Arc::new(TransportWake {
++            ready,
++            task: cx.waker().clone(),
++        }));
++        let result = attempt(&mut Context::from_waker(&transport_waker), size);
++        match result {
++            Poll::Ready(Ok(n)) => {
++                assert!(n <= size, "transport accepted beyond offered slice");
++                state.tokens -= n as f64;
++                if state.drr {
++                    state.flows.get_mut(&self.session).unwrap().deficit -= n;
++                }
++                let seq = state.sequence;
++                state.sequence += 1;
++                let req = state.requests.get_mut(&self.id).unwrap();
++                req.remaining = available - n;
++                req.ready.store(req.remaining > 0, Ordering::Release);
++                req.sequence = seq;
++                metrics::counter!("moq_relay_scheduled_bytes_total", "session" => self.session.clone()).increment(n as u64);
++                // Keep bounded residual credit across header/payload await gaps;
++                // never accumulate rounds while a session has no ready writes.
++                state.wake_next();
++                Poll::Ready(Ok(n))
++            }
++            Poll::Ready(Err(err)) => {
++                state.remove(self.id);
++                Poll::Ready(Err(err))
++            }
++            Poll::Pending => {
++                // A synchronous transport wake may already have restored readiness.
++                metrics::counter!("moq_relay_scheduler_blocked_total").increment(1);
++                state.wake_next();
++                Poll::Pending
++            }
++        }
++    }
++}
++impl Drop for StreamPolicy {
++    fn drop(&mut self) {
++        self.scheduler.state.lock().unwrap().remove(self.id);
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use futures::task::noop_waker;
++    #[tokio::test]
++    async fn byte_deficits_ignore_track_count_and_respect_priority() {
++        let scheduler = Scheduler::new(1_000_000_000, true);
++        let wake = noop_waker();
++        let mut s = scheduler.state.lock().unwrap();
++        for (id, key, priority, size) in [
++            (0, "a", 9, 1024),
++            (1, "a", 0, 4096),
++            (2, "a", 9, 8192),
++            (3, "b", 0, 8192),
++        ] {
++            s.requests.insert(
++                id,
++                Request {
++                    session: key.into(),
++                    priority,
++                    remaining: size,
++                    ready: Arc::new(AtomicBool::new(true)),
++                    sequence: id,
++                    wake: wake.clone(),
++                },
++            );
++            if !s.flows.contains_key(key) {
++                s.flows.insert(
++                    key.into(),
++                    Flow {
++                        deficit: 0,
++                        started: false,
++                    },
++                );
++                s.ring.push_back(key.into());
++            }
++        }
++        let mut bytes = BTreeMap::<String, usize>::new();
++        for _ in 0..1200 {
++            let id = s.select().unwrap();
++            let r = &s.requests[&id];
++            let key = r.session.clone();
++            let n = r.remaining.min(CHUNK);
++            if key == "a" {
++                assert_eq!(id, 1, "priority applies inside the session");
++            }
++            *bytes.entry(key.clone()).or_default() += n;
++            s.flows.get_mut(&key).unwrap().deficit -= n;
++        }
++        assert!((bytes["a"] as i64 - bytes["b"] as i64).unsigned_abs() <= QUANTUM as u64);
++    }
++    #[tokio::test]
++    async fn blocked_write_charges_nothing_and_other_session_runs() {
++        let s = Scheduler::new(1_000_000_000, true);
++        let mut a = s.session("a".into()).stream(0);
++        let mut b = s.session("b".into()).stream(0);
++        let w = noop_waker();
++        let mut cx = Context::from_waker(&w);
++        let mut transport = None;
++        assert!(a
++            .poll_write(&mut cx, 4096, &mut |cx, _| {
++                transport = Some(cx.waker().clone());
++                Poll::Pending
++            })
++            .is_pending());
++        assert!(matches!(
++            b.poll_write(&mut cx, 8192, &mut |_, n| Poll::Ready(Ok(n))),
++            Poll::Ready(Ok(8192))
++        ));
++        transport.unwrap().wake();
++        assert!(matches!(
++            a.poll_write(&mut cx, 4096, &mut |_, n| Poll::Ready(Ok(n))),
++            Poll::Ready(Ok(4096))
++        ));
++        drop(a);
++        drop(b);
++        assert!(s.state.lock().unwrap().requests.is_empty());
++    }
++    #[tokio::test]
++    async fn partial_write_charges_only_accepted_bytes() {
++        let s = Scheduler::new(1_000_000, true);
++        let mut a = s.session("a".into()).stream(0);
++        let w = noop_waker();
++        let mut cx = Context::from_waker(&w);
++        assert!(matches!(
++            a.poll_write(&mut cx, 8192, &mut |_, _| Poll::Ready(Ok(100))),
++            Poll::Ready(Ok(100))
++        ));
++        assert_eq!(s.state.lock().unwrap().flows["a"].deficit, QUANTUM - 100);
++    }
++    #[tokio::test]
++    async fn synchronous_transport_wake_is_not_lost_or_deadlocked() {
++        let s = Scheduler::new(1_000_000, true);
++        let mut a = s.session("a".into()).stream(0);
++        let w = noop_waker();
++        let mut cx = Context::from_waker(&w);
++        assert!(a
++            .poll_write(&mut cx, 100, &mut |cx, _| {
++                cx.waker().wake_by_ref();
++                Poll::Pending
++            })
++            .is_pending());
++        assert!(matches!(
++            a.poll_write(&mut cx, 100, &mut |_, n| Poll::Ready(Ok(n))),
++            Poll::Ready(Ok(100))
++        ));
++    }
++}
+diff --git a/moq-transport/src/serve/budget.rs b/moq-transport/src/serve/budget.rs
+new file mode 100644
+index 0000000..c251bdf
+--- /dev/null
++++ b/moq-transport/src/serve/budget.rs
+@@ -0,0 +1,279 @@
++// SPDX-FileCopyrightText: 2026 MoQT Relay Fairness project contributors
++// SPDX-License-Identifier: MIT OR Apache-2.0
++
++//! Checked byte reservations selected by an embedder, without a transport policy.
++
++use std::sync::{
++    atomic::{AtomicUsize, Ordering},
++    Arc, Mutex,
++};
++
++use super::ServeError;
++
++#[derive(Clone)]
++pub struct ByteBudget {
++    inner: Arc<BudgetState>,
++}
++
++type Observer = Arc<dyn Fn(usize, usize, u64) + Send + Sync>;
++
++struct BudgetState {
++    limit: usize,
++    current: AtomicUsize,
++    peak: AtomicUsize,
++    rejections: AtomicUsize,
++    observer: Mutex<Option<Observer>>,
++    notification: Mutex<()>,
++}
++
++impl ByteBudget {
++    /// A zero limit records reservations without imposing a configured cap.
++    pub fn new(limit: usize) -> Self {
++        Self {
++            inner: Arc::new(BudgetState {
++                limit,
++                current: AtomicUsize::new(0),
++                peak: AtomicUsize::new(0),
++                rejections: AtomicUsize::new(0),
++                observer: Mutex::new(None),
++                notification: Mutex::new(()),
++            }),
++        }
++    }
++
++    /// Install a shared observer and publish an initial snapshot. Callbacks are
++    /// serialized and run without an admission/accounting lock. They must not
++    /// mutate this same budget or replace its observer (notification reentry).
++    pub fn with_observer(self, observer: Observer) -> Self {
++        *self.inner.observer.lock().unwrap() = Some(observer);
++        self.notify();
++        self
++    }
++
++    fn notify(&self) {
++        // Serial delivery prevents an old, delayed snapshot from overwriting
++        // a newer metric. Read counters only after taking the delivery lock.
++        let _delivery = self.inner.notification.lock().unwrap();
++        let observer = self.inner.observer.lock().unwrap().clone();
++        if let Some(observer) = observer {
++            let current = self.current();
++            // A concurrent reservation may have published current but not yet
++            // updated peak. Persist the observed maximum so a later release
++            // notification cannot make the reported peak move backwards.
++            self.inner.peak.fetch_max(current, Ordering::Relaxed);
++            observer(current, self.peak(), self.rejections() as u64);
++        }
++    }
++
++    /// Reserve before retaining data. Failure does not change the live charge.
++    /// The embedder maps Size to its chosen admission/eviction response.
++    pub fn try_reserve(&self, bytes: usize) -> Result<BudgetLease, ServeError> {
++        let mut current = self.inner.current.load(Ordering::Acquire);
++        loop {
++            let Some(next) = current.checked_add(bytes) else {
++                self.inner.rejections.fetch_add(1, Ordering::Relaxed);
++                self.notify();
++                return Err(ServeError::Size);
++            };
++            if self.inner.limit != 0 && next > self.inner.limit {
++                self.inner.rejections.fetch_add(1, Ordering::Relaxed);
++                self.notify();
++                return Err(ServeError::Size);
++            }
++            match self.inner.current.compare_exchange_weak(
++                current,
++                next,
++                Ordering::AcqRel,
++                Ordering::Acquire,
++            ) {
++                Ok(_) => {
++                    self.inner.peak.fetch_max(next, Ordering::Relaxed);
++                    self.notify();
++                    return Ok(BudgetLease {
++                        budget: self.clone(),
++                        bytes,
++                    });
++                }
++                Err(observed) => current = observed,
++            }
++        }
++    }
++
++    pub fn limit(&self) -> usize {
++        self.inner.limit
++    }
++
++    pub fn current(&self) -> usize {
++        self.inner.current.load(Ordering::Acquire)
++    }
++
++    pub fn peak(&self) -> usize {
++        self.inner.peak.load(Ordering::Relaxed)
++    }
++
++    pub fn rejections(&self) -> usize {
++        self.inner.rejections.load(Ordering::Relaxed)
++    }
++}
++
++impl std::fmt::Debug for ByteBudget {
++    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++        f.debug_struct("ByteBudget")
++            .field("limit", &self.limit())
++            .field("current", &self.current())
++            .field("peak", &self.peak())
++            .field("rejections", &self.rejections())
++            .finish()
++    }
++}
++
++/// Releases exactly once. Use Arc<BudgetLease> when several owners retain the
++/// same allocation; cloning the Arc does not reserve the bytes again.
++#[derive(Debug)]
++pub struct BudgetLease {
++    budget: ByteBudget,
++    bytes: usize,
++}
++
++impl BudgetLease {
++    pub fn bytes(&self) -> usize {
++        self.bytes
++    }
++}
++
++impl Drop for BudgetLease {
++    fn drop(&mut self) {
++        let previous = self
++            .budget
++            .inner
++            .current
++            .fetch_sub(self.bytes, Ordering::AcqRel);
++        debug_assert!(previous >= self.bytes, "reservation accounting underflow");
++        self.budget.notify();
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn observer_tracks_admission_rejection_and_release_from_clones() {
++        let snapshots = Arc::new(Mutex::new(Vec::new()));
++        let captured = snapshots.clone();
++        let budget = ByteBudget::new(8).with_observer(Arc::new(move |current, peak, rejected| {
++            captured.lock().unwrap().push((current, peak, rejected));
++        }));
++        let shared = budget.clone();
++        let lease = shared.try_reserve(8).unwrap();
++        assert!(budget.try_reserve(1).is_err());
++        drop(lease);
++        assert_eq!(
++            *snapshots.lock().unwrap(),
++            vec![(0, 0, 0), (8, 8, 0), (8, 8, 1), (0, 8, 1)]
++        );
++    }
++
++    #[test]
++    fn observer_persists_peak_during_a_partially_published_reservation() {
++        let snapshots = Arc::new(Mutex::new(Vec::new()));
++        let captured = snapshots.clone();
++        let budget =
++            ByteBudget::new(100).with_observer(Arc::new(move |current, peak, rejected| {
++                captured.lock().unwrap().push((current, peak, rejected));
++            }));
++        // Model a reserving thread paused after its successful current CAS,
++        // before it performs fetch_max on peak.
++        budget.inner.current.store(100, Ordering::Release);
++        budget.notify();
++        assert_eq!(budget.peak(), 100);
++        budget.inner.current.store(0, Ordering::Release);
++        budget.notify();
++        assert_eq!(
++            *snapshots.lock().unwrap(),
++            vec![(0, 0, 0), (100, 100, 0), (0, 100, 0)]
++        );
++    }
++
++    #[test]
++    fn exact_limit_rejects_without_charging_and_releases() {
++        let budget = ByteBudget::new(100);
++        let first = budget.try_reserve(40).unwrap();
++        let second = budget.try_reserve(60).unwrap();
++        assert_eq!(budget.current(), 100);
++        assert_eq!(budget.try_reserve(1).unwrap_err(), ServeError::Size);
++        assert_eq!(budget.current(), 100);
++        assert_eq!(budget.rejections(), 1);
++        drop(first);
++        assert_eq!(budget.current(), 60);
++        drop(second);
++        assert_eq!(budget.current(), 0);
++        assert_eq!(budget.peak(), 100);
++    }
++
++    #[test]
++    fn shared_owner_is_charged_once_until_last_drop() {
++        let budget = ByteBudget::new(9);
++        let lease = Arc::new(budget.try_reserve(9).unwrap());
++        let second = lease.clone();
++        drop(lease);
++        assert_eq!(budget.current(), 9);
++        drop(second);
++        assert_eq!(budget.current(), 0);
++    }
++
++    #[test]
++    fn unlimited_tracking_still_rejects_integer_overflow() {
++        let budget = ByteBudget::new(0);
++        let lease = budget.try_reserve(usize::MAX).unwrap();
++        assert!(budget.try_reserve(1).is_err());
++        assert_eq!(budget.current(), usize::MAX);
++        drop(lease);
++        assert_eq!(budget.current(), 0);
++    }
++
++    #[test]
++    fn concurrent_reservations_never_exceed_the_limit() {
++        use std::{sync::Barrier, thread};
++        let budget = ByteBudget::new(64);
++        let barrier = Arc::new(Barrier::new(9));
++        let threads: Vec<_> = (0..8)
++            .map(|_| {
++                let budget = budget.clone();
++                let barrier = barrier.clone();
++                thread::spawn(move || {
++                    let lease = budget.try_reserve(16);
++                    barrier.wait();
++                    barrier.wait();
++                    drop(lease);
++                })
++            })
++            .collect();
++        barrier.wait();
++        assert_eq!(budget.current(), 64);
++        assert_eq!(budget.peak(), 64);
++        assert_eq!(budget.rejections(), 4);
++        barrier.wait();
++        for handle in threads {
++            handle.join().unwrap();
++        }
++        assert_eq!(budget.current(), 0);
++    }
++
++    #[tokio::test]
++    async fn cancelled_task_releases_its_reservation() {
++        let budget = ByteBudget::new(128);
++        let held = budget.clone();
++        let (ready, waiting) = tokio::sync::oneshot::channel();
++        let task = tokio::spawn(async move {
++            let _lease = held.try_reserve(128).unwrap();
++            ready.send(()).unwrap();
++            std::future::pending::<()>().await;
++        });
++        waiting.await.unwrap();
++        assert_eq!(budget.current(), 128);
++        task.abort();
++        assert!(task.await.unwrap_err().is_cancelled());
++        assert_eq!(budget.current(), 0);
++    }
++}
+diff --git a/moq-transport/src/serve/error.rs b/moq-transport/src/serve/error.rs
+index ff339c1..2738264 100644
+--- a/moq-transport/src/serve/error.rs
++++ b/moq-transport/src/serve/error.rs
+@@ -14,6 +14,12 @@ pub enum ServeError {
+     #[error("closed, code={0}")]
+     Closed(u64),
+ 
++    /// An observed data-stream RESET_STREAM application code, not a
++    /// subscription PUBLISH_DONE code. Consumers may handle a known reset
++    /// locally without treating malformed or truncated Objects as resets.
++    #[error("data stream reset, code={0}")]
++    Reset(u32),
++
+     #[error("not found")]
+     NotFound,
+ 
+@@ -54,6 +60,11 @@ impl ServeError {
+             Self::Cancel => 1,
+             // Pass through application-specific error codes
+             Self::Closed(code) => *code,
++            // Data-stream and request-status registries are distinct. Never
++            // turn RESET_STREAM(2) into an unrelated request status 0x2.
++            // A caller incorrectly promoting a reset to a request failure gets
++            // generic INTERNAL_ERROR; consumers should match Reset directly.
++            Self::Reset(_) => 0x0,
+             // TRACK_DOES_NOT_EXIST (0x4) from SUBSCRIBE_ERROR codes
+             Self::NotFound | Self::NotFoundWithId(_, _) => 0x4,
+             // This is more of a session-level error, but keeping a reasonable code
+@@ -201,5 +212,13 @@ mod tests {
+         assert_eq!(ServeError::NotFound.error_id(), None);
+         assert_eq!(ServeError::Done.error_id(), None);
+         assert_eq!(ServeError::Closed(7).error_id(), None);
++        assert_eq!(ServeError::Reset(2).error_id(), None);
++    }
++
++    #[test]
++    fn data_reset_code_is_not_a_subscription_status_code() {
++        assert_ne!(ServeError::Reset(2), ServeError::Closed(2));
++        assert_eq!(ServeError::Reset(2).code(), 0);
++        assert_eq!(ServeError::Closed(2).code(), 2);
+     }
+ }
+diff --git a/moq-transport/src/serve/mod.rs b/moq-transport/src/serve/mod.rs
+index d432d92..aa2c55d 100644
+--- a/moq-transport/src/serve/mod.rs
++++ b/moq-transport/src/serve/mod.rs
+@@ -2,6 +2,7 @@
+ // SPDX-FileCopyrightText: 2023-2024 Luke Curley and contributors
+ // SPDX-License-Identifier: MIT OR Apache-2.0
+ 
++mod budget;
+ mod datagram;
+ mod error;
+ mod object;
+@@ -10,6 +11,7 @@ mod subgroup;
+ mod track;
+ mod tracks;
+ 
++pub use budget::*;
+ pub use datagram::*;
+ pub use error::*;
+ pub use object::*;
+diff --git a/moq-transport/src/serve/subgroup.rs b/moq-transport/src/serve/subgroup.rs
+index 85bcb2e..da2fd88 100644
+--- a/moq-transport/src/serve/subgroup.rs
++++ b/moq-transport/src/serve/subgroup.rs
+@@ -17,7 +17,7 @@ use bytes::Bytes;
+ use crate::data::ObjectStatus;
+ use crate::watch::State;
+ 
+-use super::{ServeError, Track};
++use super::{BudgetLease, ByteBudget, ServeError, Track};
+ 
+ pub struct Subgroups {
+     pub track: Arc<Track>,
+@@ -266,6 +266,12 @@ impl Deref for SubgroupInfo {
+ }
+ 
+ struct SubgroupState {
++    // The reservation covers this whole growing subgroup. Objects share its
++    // lease so retaining an Object after its group is dropped remains charged.
++    reservation: Option<Arc<BudgetLease>>,
++    budget_configured: bool,
++    max_payload_bytes: usize,
++    declared_payload_bytes: usize,
+     // The data that has been received thus far.
+     objects: Vec<SubgroupObjectReader>,
+ 
+@@ -276,6 +282,10 @@ struct SubgroupState {
+ impl Default for SubgroupState {
+     fn default() -> Self {
+         Self {
++            reservation: None,
++            budget_configured: false,
++            max_payload_bytes: 0,
++            declared_payload_bytes: 0,
+             objects: Vec::new(),
+             closed: Ok(()),
+         }
+@@ -303,6 +313,34 @@ impl SubgroupWriter {
+         }
+     }
+ 
++    /// Configure a growing subgroup before its first Object is admitted.
++    /// A finite maximum is required when using a global reservation budget.
++    /// The bound is on declared payload bytes, excluding metadata and QUIC.
++    pub fn configure_budget(
++        &mut self,
++        max_group_bytes: usize,
++        global: Option<ByteBudget>,
++    ) -> Result<(), ServeError> {
++        let mut state = self.state.lock_mut().ok_or(ServeError::Cancel)?;
++        if state.budget_configured
++            || !state.objects.is_empty()
++            || (global.is_some() && max_group_bytes == 0)
++        {
++            return Err(ServeError::Size);
++        }
++        let reservation = global
++            .map(|budget| budget.try_reserve(max_group_bytes).map(Arc::new))
++            .transpose()?;
++        state.max_payload_bytes = max_group_bytes;
++        state.reservation = reservation;
++        state.budget_configured = true;
++        Ok(())
++    }
++
++    pub fn declared_payload_bytes(&self) -> usize {
++        self.state.lock().declared_payload_bytes
++    }
++
+     /// Create the next object ID with the given payload.
+     pub fn write(&mut self, payload: bytes::Bytes) -> Result<(), ServeError> {
+         let mut object = self.create(payload.len(), None)?;
+@@ -318,6 +356,15 @@ impl SubgroupWriter {
+         size: usize,
+         extension_headers: Option<crate::data::ExtensionHeaders>,
+     ) -> Result<SubgroupObjectWriter, ServeError> {
++        let mut state = self.state.lock_mut().ok_or(ServeError::Cancel)?;
++        let declared = state
++            .declared_payload_bytes
++            .checked_add(size)
++            .ok_or(ServeError::Size)?;
++        if state.max_payload_bytes != 0 && declared > state.max_payload_bytes {
++            return Err(ServeError::Size);
++        }
++        let next_object_id = self.next_object_id.checked_add(1).ok_or(ServeError::Size)?;
+         let (writer, reader) = SubgroupObject {
+             group: self.info.clone(),
+             object_id: self.next_object_id,
+@@ -325,11 +372,10 @@ impl SubgroupWriter {
+             size,
+             extension_headers: extension_headers.unwrap_or_default(),
+         }
+-        .produce();
+-
+-        self.next_object_id += 1;
++        .produce_with_reservation(state.reservation.clone());
+ 
+-        let mut state = self.state.lock_mut().ok_or(ServeError::Cancel)?;
++        self.next_object_id = next_object_id;
++        state.declared_payload_bytes = declared;
+         state.objects.push(reader);
+ 
+         Ok(writer)
+@@ -459,7 +505,18 @@ pub struct SubgroupObject {
+ 
+ impl SubgroupObject {
+     pub fn produce(self) -> (SubgroupObjectWriter, SubgroupObjectReader) {
+-        let (writer, reader) = State::default().split();
++        self.produce_with_reservation(None)
++    }
++
++    fn produce_with_reservation(
++        self,
++        reservation: Option<Arc<BudgetLease>>,
++    ) -> (SubgroupObjectWriter, SubgroupObjectReader) {
++        let (writer, reader) = State::new(SubgroupObjectState {
++            _reservation: reservation,
++            ..Default::default()
++        })
++        .split();
+         let info = Arc::new(self);
+ 
+         let writer = SubgroupObjectWriter::new(writer, info.clone());
+@@ -483,11 +540,19 @@ struct SubgroupObjectState {
+ 
+     // Set when the writer is dropped.
+     closed: Result<(), ServeError>,
++
++    // Declared last so the payload is freed before the last lease returns
++    // admission credit. The forwarding path retains this Object reader until
++    // all chunks reach QUIC. Bytes exported by read/read_all may be cloned
++    // independently; embedders retaining those after dropping readers must
++    // account for that additional lifetime themselves.
++    _reservation: Option<Arc<BudgetLease>>,
+ }
+ 
+ impl Default for SubgroupObjectState {
+     fn default() -> Self {
+         Self {
++            _reservation: None,
+             chunks: Vec::new(),
+             closed: Ok(()),
+         }
+@@ -543,6 +608,20 @@ impl SubgroupObjectWriter {
+ 
+         Ok(())
+     }
++
++    /// Abort an unfinished Object with an explicitly observed error.
++    ///
++    /// In particular, preserve a peer's typed data-stream reset instead of
++    /// letting Drop replace it with Size. Ordinary unfinished writes still
++    /// become Size unless the caller explicitly aborts them.
++    pub fn abort(self, err: ServeError) -> Result<(), ServeError> {
++        let state = self.state.lock();
++        state.closed.clone()?;
++
++        let mut state = state.into_mut().ok_or(ServeError::Cancel)?;
++        state.closed = Err(err);
++        Ok(())
++    }
+ }
+ 
+ impl Drop for SubgroupObjectWriter {
+@@ -552,7 +631,9 @@ impl Drop for SubgroupObjectWriter {
+         }
+ 
+         if let Some(mut state) = self.state.lock_mut() {
+-            state.closed = Err(ServeError::Size);
++            if state.closed.is_ok() {
++                state.closed = Err(ServeError::Size);
++            }
+         }
+     }
+ }
+@@ -642,6 +723,164 @@ mod tests {
+         Subgroups { track }.produce()
+     }
+ 
++    #[tokio::test]
++    async fn reset_abort_preserves_partial_object_error_and_next_subgroup() {
++        let (mut writer, mut reader) = make_subgroups();
++        let mut subgroup = writer.append(0).unwrap();
++        let mut object = subgroup.create(4, None).unwrap();
++        object.write(Bytes::from_static(b"a")).unwrap();
++        let mut failed = reader.next().await.unwrap().unwrap();
++        object.abort(ServeError::Reset(2)).unwrap();
++        subgroup.close(ServeError::Reset(2)).unwrap();
++        assert_eq!(failed.read_next().await.unwrap_err(), ServeError::Reset(2));
++        assert_eq!(failed.read_next().await.unwrap_err(), ServeError::Reset(2));
++
++        let mut next = writer.append(0).unwrap();
++        next.write(Bytes::from_static(b"next")).unwrap();
++        drop(next);
++        let mut next = reader.next().await.unwrap().unwrap();
++        assert_eq!(next.read_next().await.unwrap().unwrap(), b"next"[..]);
++        assert!(next.read_next().await.unwrap().is_none());
++    }
++
++    #[tokio::test]
++    async fn incomplete_object_without_abort_remains_size_error() {
++        let (mut writer, mut reader) = make_subgroups();
++        let mut subgroup = writer.append(0).unwrap();
++        let mut object = subgroup.create(4, None).unwrap();
++        object.write(Bytes::from_static(b"a")).unwrap();
++        drop(object);
++        let mut subgroup = reader.next().await.unwrap().unwrap();
++        assert_eq!(subgroup.read_next().await.unwrap_err(), ServeError::Size);
++    }
++
++    fn budget_group() -> (SubgroupWriter, SubgroupReader) {
++        SubgroupInfo {
++            track: Arc::new(Track::new(
++                TrackNamespace::from_utf8_path("budget"),
++                "track",
++            )),
++            group_id: 0,
++            subgroup_id: 0,
++            priority: 0,
++        }
++        .produce()
++    }
++
++    #[test]
++    fn group_payload_limit_is_checked_before_object_admission() {
++        let (mut writer, _reader) = budget_group();
++        writer.configure_budget(100, None).unwrap();
++        assert!(matches!(writer.create(101, None), Err(ServeError::Size)));
++        assert_eq!(writer.len(), 0);
++        writer.write(Bytes::from(vec![0; 60])).unwrap();
++        assert!(matches!(writer.create(41, None), Err(ServeError::Size)));
++        assert_eq!(writer.len(), 1);
++        assert_eq!(writer.declared_payload_bytes(), 60);
++        writer.write(Bytes::from(vec![0; 40])).unwrap();
++        assert_eq!(writer.declared_payload_bytes(), 100);
++        assert_eq!(writer.len(), 2);
++    }
++
++    #[test]
++    fn in_progress_object_consumes_its_declared_size_before_chunks_arrive() {
++        let (mut writer, _reader) = budget_group();
++        writer.configure_budget(100, None).unwrap();
++        let mut first = writer.create(60, None).unwrap();
++        first.write(Bytes::from_static(b"a")).unwrap();
++        assert!(matches!(writer.create(41, None), Err(ServeError::Size)));
++        assert_eq!(writer.declared_payload_bytes(), 60);
++        first.write(Bytes::from(vec![0; 59])).unwrap();
++        writer.write(Bytes::from(vec![0; 40])).unwrap();
++        assert_eq!(writer.declared_payload_bytes(), 100);
++    }
++
++    #[test]
++    fn growing_group_cannot_overflow_declared_byte_counter() {
++        let (mut writer, _reader) = budget_group();
++        writer.configure_budget(0, None).unwrap();
++        let first = writer.create(usize::MAX, None).unwrap();
++        assert!(matches!(writer.create(1, None), Err(ServeError::Size)));
++        assert_eq!(writer.len(), 1);
++        assert_eq!(writer.declared_payload_bytes(), usize::MAX);
++        drop(first);
++    }
++
++    #[test]
++    fn global_admission_reserves_before_payload_and_rejects_atomically() {
++        let global = ByteBudget::new(150);
++        let (mut first, first_reader) = budget_group();
++        first.configure_budget(100, Some(global.clone())).unwrap();
++        let (mut second, second_reader) = budget_group();
++        assert_eq!(
++            second.configure_budget(100, Some(global.clone())),
++            Err(ServeError::Size)
++        );
++        assert_eq!(global.current(), 100);
++        assert_eq!(global.rejections(), 1);
++        drop(first);
++        drop(first_reader);
++        assert_eq!(global.current(), 0);
++        second.configure_budget(100, Some(global.clone())).unwrap();
++        assert_eq!(global.current(), 100);
++        drop(second);
++        drop(second_reader);
++        assert_eq!(global.current(), 0);
++    }
++
++    #[test]
++    fn configuring_an_unbounded_or_populated_group_fails_closed() {
++        let global = ByteBudget::new(100);
++        let (mut writer, _reader) = budget_group();
++        assert_eq!(
++            writer.configure_budget(0, Some(global.clone())),
++            Err(ServeError::Size)
++        );
++        assert_eq!(global.current(), 0);
++        writer.write(Bytes::from_static(b"a")).unwrap();
++        assert_eq!(
++            writer.configure_budget(10, Some(global.clone())),
++            Err(ServeError::Size)
++        );
++        assert_eq!(global.current(), 0);
++    }
++
++    #[tokio::test]
++    async fn shared_group_and_object_readers_hold_one_reservation() {
++        let global = ByteBudget::new(100);
++        let (mut writer, mut reader) = budget_group();
++        writer.configure_budget(100, Some(global.clone())).unwrap();
++        writer.write(Bytes::from_static(b"payload")).unwrap();
++        drop(writer);
++        let another_group_reader = reader.clone();
++        let mut object = reader.next().await.unwrap().unwrap();
++        let another_object_reader = object.clone();
++        assert_eq!(global.current(), 100);
++        assert_eq!(global.peak(), 100);
++        drop(reader);
++        drop(another_group_reader);
++        assert_eq!(
++            global.current(),
++            100,
++            "Object ownership must keep the group charged"
++        );
++        assert_eq!(object.read().await.unwrap().unwrap(), b"payload"[..]);
++        drop(object);
++        assert_eq!(global.current(), 100);
++        drop(another_object_reader);
++        assert_eq!(global.current(), 0);
++    }
++
++    #[test]
++    fn configuring_twice_cannot_replace_a_live_reservation() {
++        let global = ByteBudget::new(100);
++        let (mut writer, _reader) = budget_group();
++        writer.configure_budget(100, Some(global.clone())).unwrap();
++        assert_eq!(writer.configure_budget(1, None), Err(ServeError::Size));
++        assert_eq!(global.current(), 100);
++        assert!(matches!(writer.create(101, None), Err(ServeError::Size)));
++    }
++
+     /// Helper: deterministic payload for (group_id, object_id).
+     fn payload(group_id: u64, object_id: u64) -> Bytes {
+         Bytes::from(format!("g{}-o{}", group_id, object_id))
+diff --git a/moq-transport/src/session/mod.rs b/moq-transport/src/session/mod.rs
+index c7e5326..6448ed7 100644
+--- a/moq-transport/src/session/mod.rs
++++ b/moq-transport/src/session/mod.rs
+@@ -21,7 +21,9 @@ mod subscribed;
+ mod subscribed_namespace;
+ mod subscriber;
+ mod track_status_requested;
++mod write_policy;
+ mod writer;
++pub use write_policy::*;
+ 
+ pub use error::*;
+ pub(crate) use fetch::FetchRecv;
+diff --git a/moq-transport/src/session/subgroup_lifecycle.rs b/moq-transport/src/session/subgroup_lifecycle.rs
+index df937a4..314710d 100644
+--- a/moq-transport/src/session/subgroup_lifecycle.rs
++++ b/moq-transport/src/session/subgroup_lifecycle.rs
+@@ -39,6 +39,19 @@ async fn pair_with_ack_control(
+     web_transport::Session,
+     quinn::Connection,
+     Proxy,
++) {
++    pair_with_limits(raw, controlled, None).await
++}
++
++async fn pair_with_limits(
++    raw: bool,
++    controlled: bool,
++    stream_limit: Option<u32>,
++) -> (
++    web_transport::Session,
++    web_transport::Session,
++    quinn::Connection,
++    Proxy,
+ ) {
+     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+     let cert = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
+@@ -60,7 +73,9 @@ async fn pair_with_ack_control(
+     ));
+     let mut transport = quinn::TransportConfig::default();
+     transport.stream_receive_window((2 * PAYLOAD as u32).into());
+-    if controlled {
++    if let Some(limit) = stream_limit {
++        transport.max_concurrent_uni_streams(limit.into());
++    } else if controlled {
+         transport.max_concurrent_uni_streams(4096u32.into());
+     }
+     config.transport_config(Arc::new(transport));
+@@ -459,3 +474,300 @@ async fn pending_ack_budget_overflow_resets_raw() {
+ async fn pending_ack_budget_overflow_resets_webtransport() {
+     finished_subgroups_release_active_slots(false, true).await;
+ }
++
++// Exercise the public Subscribed builder, PUBLISH_DONE path, and real QUIC
++// resource cleanup, rather than checking only the generic timer helper.
++async fn subgroup_lifetime_terminates_subscription(block_open: bool) {
++    let (sender, receiver, observer, proxy) =
++        pair_with_limits(true, true, if block_open { Some(0) } else { None }).await;
++    proxy.1.store(true, Ordering::SeqCst);
++    let (outgoing, mut messages) = crate::watch::Queue::default().split();
++    let publisher = Publisher::new(
++        outgoing,
++        sender,
++        None,
++        crate::session::RequestId::new(0, u64::MAX, u64::MAX, 1),
++        crate::session::PendingRequests::default(),
++        crate::session::SessionId::generate(),
++        tokio_util::sync::CancellationToken::new(),
++    );
++    let namespace = crate::coding::TrackNamespace::from_utf8_path("timeout-test");
++    let (writer, reader) = serve::Track::new(namespace.clone(), "track").produce();
++    let mut writer = writer.subgroups().unwrap();
++    let mut group = writer.append(128).unwrap();
++    group.write(bytes::Bytes::from_static(b"deadline")).unwrap();
++    drop(group);
++    let (subscribed, _recv, _joining) = Subscribed::new(
++        publisher.clone(),
++        message::Subscribe {
++            id: 0,
++            track_namespace: namespace,
++            track_name: "track".into(),
++            params: Default::default(),
++        },
++        None,
++    )
++    .unwrap();
++    let serve = subscribed
++        .with_subgroup_timeout(Some(Duration::from_millis(300)))
++        .serve(reader);
++    let control = async {
++        assert!(matches!(
++            messages.pop().await,
++            Some(message::Message::SubscribeOk(_))
++        ));
++        let Some(message::Message::PublishDone(done)) = messages.pop().await else {
++            panic!("expected terminal PUBLISH_DONE");
++        };
++        assert_eq!(
++            done.status_code,
++            message::PublishDoneCode::TooFarBehind as u64
++        );
++        assert_eq!(done.stream_count, if block_open { 0 } else { 1 });
++    };
++    let receive = async {
++        if block_open {
++            return;
++        }
++        let mut stream = receiver.accept_uni().await.unwrap();
++        let mut bytes = 0;
++        while let Some(chunk) = stream.read(65536).await.unwrap() {
++            bytes += chunk.len();
++        }
++        assert!(
++            bytes > 8,
++            "all data and FIN arrive while their ACK is suppressed"
++        );
++        // The sender's FIN-ACK guard must reset even though writes completed.
++        while observer.stats().frame_rx.reset_stream == 0 {
++            tokio::time::sleep(Duration::from_millis(1)).await;
++        }
++    };
++    tokio::time::timeout(Duration::from_secs(3), async {
++        let (result, (), ()) = tokio::join!(serve, control, receive);
++        assert!(
++            matches!(result, Err(SessionError::Serve(ServeError::Closed(code)))
++            if code == message::PublishDoneCode::TooFarBehind as u64)
++        );
++    })
++    .await
++    .expect("resource timeout must terminate and clean up promptly");
++    if block_open {
++        assert_eq!(observer.stats().frame_rx.reset_stream, 0);
++    }
++}
++
++#[tokio::test]
++async fn subgroup_lifetime_covers_waiting_for_stream_credit() {
++    subgroup_lifetime_terminates_subscription(true).await;
++}
++
++#[tokio::test]
++async fn subgroup_lifetime_covers_fin_ack_and_resets_stream() {
++    subgroup_lifetime_terminates_subscription(false).await;
++}
++
++#[tokio::test]
++async fn subgroup_lifetime_none_preserves_existing_source_failure_handling() {
++    let (sender, _receiver, _observer, _proxy) = pair(true).await;
++    let (mut forwarder, _cancel) = forwarder(sender);
++    assert!(forwarder.subgroup_timeout.is_none());
++    let (writer, reader) = serve::Track::new(
++        crate::coding::TrackNamespace::from_utf8_path("source-failure"),
++        "track",
++    )
++    .produce();
++    let mut writer = writer.subgroups().unwrap();
++    let mut subgroup = writer.append(128).unwrap();
++    subgroup
++        .write(bytes::Bytes::from_static(b"source"))
++        .unwrap();
++    subgroup
++        .close(ServeError::Closed(
++            message::PublishDoneCode::TooFarBehind as u64,
++        ))
++        .unwrap();
++    let TrackReaderMode::Subgroups(reader) = reader.mode().await.unwrap() else {
++        panic!("expected subgroups");
++    };
++    drop(writer);
++    // This pinned implementation ignores individual subgroup-source failures.
++    // Merely adding a disabled lifetime hook must not change that baseline.
++    tokio::time::timeout(
++        Duration::from_secs(2),
++        forwarder.serve_subgroups(
++            reader,
++            DeliveryFilter {
++                forward: true,
++                start_location: None,
++                end_group_id: None,
++            },
++        ),
++    )
++    .await
++    .unwrap()
++    .unwrap();
++}
++
++// Exercise the full Subscribed control lifecycle over actual QUIC: expiry must
++// reset obsolete streams and keep this request alive for a later live group.
++async fn subgroup_skip_recovers(block_open: bool, pending_source: bool) {
++    let (sender, receiver, observer, proxy) =
++        pair_with_limits(true, true, Some(if block_open { 0 } else { 1 })).await;
++    proxy.1.store(true, Ordering::SeqCst);
++    let (outgoing, mut messages) = crate::watch::Queue::default().split();
++    let publisher = Publisher::new(
++        outgoing,
++        sender,
++        None,
++        crate::session::RequestId::new(0, u64::MAX, u64::MAX, 1),
++        crate::session::PendingRequests::default(),
++        crate::session::SessionId::generate(),
++        tokio_util::sync::CancellationToken::new(),
++    );
++    let namespace = crate::coding::TrackNamespace::from_utf8_path("skip-test");
++    let (writer, reader) = serve::Track::new(namespace.clone(), "track").produce();
++    let mut writer = writer.subgroups().unwrap();
++    let mut group = writer.append(128).unwrap();
++    // Larger than the receiver's window: FIN cannot arrive, so closed() exposes
++    // the actual reset code even though the sender can enqueue all payload.
++    group
++        .write(bytes::Bytes::from(vec![7; 3 * PAYLOAD]))
++        .unwrap();
++    // Keeping the source open covers cancellation of an active forwarding
++    // future, before its output can be handed to the FIN-ACK wait set.
++    let source_guard = pending_source.then_some(group);
++    let (subscribed, mut cancel, _joining) = Subscribed::new(
++        publisher.clone(),
++        message::Subscribe {
++            id: 0,
++            track_namespace: namespace,
++            track_name: "track".into(),
++            params: Default::default(),
++        },
++        None,
++    )
++    .unwrap();
++    let state = subscribed.forwarder.state.clone();
++    let (resync_send, mut resync_recv) = tokio::sync::mpsc::unbounded_channel();
++    let serve = subscribed
++        .with_subgroup_timeout(Some(Duration::from_millis(500)))
++        .with_subgroup_skip(true)
++        .with_subgroup_resync_observer(Arc::new(move |count| {
++            resync_send.send(count).unwrap();
++        }))
++        .serve(reader);
++    let exercise = async {
++        assert!(matches!(
++            messages.pop().await,
++            Some(message::Message::SubscribeOk(_))
++        ));
++        let stale = if block_open {
++            None
++        } else {
++            let stream = receiver.accept_uni().await.unwrap();
++            // With only one stream credit this second tracked subgroup cannot
++            // open; the same expiry must abandon it as well as the ACK waiter.
++            let mut queued = writer.append(128).unwrap();
++            queued
++                .write(bytes::Bytes::from_static(b"must-not-reopen"))
++                .unwrap();
++            drop(queued);
++            Some(stream)
++        };
++        let count = resync_recv.recv().await.unwrap();
++        drop(source_guard);
++        assert_eq!(count, if block_open { 1 } else { 2 });
++        assert_eq!(state.lock().stream_count, if block_open { 0 } else { 1 });
++        if let Some(mut stream) = stale {
++            assert_eq!(
++                stream.closed().await.unwrap(),
++                Some(u32::from(DataStreamResetCode::DeliveryTimeout) as u8)
++            );
++        } else {
++            assert_eq!(observer.stats().frame_rx.reset_stream, 0);
++        }
++        proxy.1.store(false, Ordering::SeqCst);
++        if block_open {
++            observer.set_max_concurrent_uni_streams(1u32.into());
++        }
++        let mut fresh = writer.append(128).unwrap();
++        fresh
++            .write(bytes::Bytes::from_static(b"fresh-after-resync"))
++            .unwrap();
++        drop(fresh);
++        let mut stream = receiver.accept_uni().await.unwrap();
++        let mut received = Vec::new();
++        while let Some(chunk) = stream.read(65536).await.unwrap() {
++            received.extend_from_slice(&chunk);
++        }
++        assert!(received.ends_with(b"fresh-after-resync"));
++        assert_eq!(state.lock().stream_count, if block_open { 1 } else { 2 });
++        // A successful skip must not send PUBLISH_DONE or require SUBSCRIBE again.
++        assert!(
++            tokio::time::timeout(Duration::from_millis(20), messages.pop())
++                .await
++                .is_err()
++        );
++        assert!(resync_recv.try_recv().is_err());
++        cancel.recv_unsubscribe().unwrap();
++    };
++    tokio::time::timeout(Duration::from_secs(5), async {
++        let (result, ()) = tokio::join!(serve, exercise);
++        assert!(matches!(
++            result,
++            Err(SessionError::Serve(ServeError::Cancel))
++        ));
++    })
++    .await
++    .expect("skip must release stale work and deliver a fresh group on the same request");
++}
++
++#[tokio::test]
++async fn subgroup_skip_resets_delivery_timeout_and_recovers_after_fin_ack_expiry() {
++    subgroup_skip_recovers(false, false).await;
++}
++
++#[tokio::test]
++async fn subgroup_skip_abandons_blocked_open_without_leaking_stream_credit() {
++    subgroup_skip_recovers(true, false).await;
++}
++
++#[tokio::test]
++async fn subgroup_skip_resets_active_forwarding_before_source_fin() {
++    subgroup_skip_recovers(false, true).await;
++}
++
++#[tokio::test]
++async fn subgroup_skip_without_deadline_preserves_normal_delivery() {
++    let (sender, receiver, _observer, _proxy) = pair_with_ack_control(true, true).await;
++    let (mut forwarder, _cancel) = forwarder(sender);
++    forwarder.subgroup_skip = true;
++    forwarder.resync_observer = Some(Arc::new(|_| {
++        panic!("disabled timer must never resynchronize")
++    }));
++    let (writer, reader) = source().await;
++    drop(writer);
++    let serve = forwarder.serve_subgroups(
++        reader,
++        DeliveryFilter {
++            forward: true,
++            start_location: None,
++            end_group_id: None,
++        },
++    );
++    let receive = async {
++        let mut stream = receiver.accept_uni().await.unwrap();
++        let mut bytes = 0;
++        while let Some(chunk) = stream.read(65536).await.unwrap() {
++            bytes += chunk.len();
++        }
++        assert!(bytes > PAYLOAD);
++    };
++    tokio::time::timeout(Duration::from_secs(3), async {
++        let (result, ()) = tokio::join!(serve, receive);
++        result.unwrap();
++    })
++    .await
++    .unwrap();
++}
+diff --git a/moq-transport/src/session/subscribed.rs b/moq-transport/src/session/subscribed.rs
+index 68518b9..95cef3a 100644
+--- a/moq-transport/src/session/subscribed.rs
++++ b/moq-transport/src/session/subscribed.rs
+@@ -2,11 +2,16 @@
+ // SPDX-FileCopyrightText: 2023-2024 Luke Curley and contributors
+ // SPDX-License-Identifier: MIT OR Apache-2.0
+ 
+-use std::ops;
+-use std::sync::{Arc, Mutex};
++use std::{future::Future, ops, time::Duration};
++
++use std::sync::{
++    atomic::{AtomicBool, Ordering},
++    Arc, Mutex,
++};
++use tokio::time::{timeout_at, Instant};
+ 
+ use futures::stream::FuturesUnordered;
+-use futures::StreamExt;
++use futures::{FutureExt, StreamExt};
+ 
+ use crate::coding::{Encode, KeyValuePairs, Location, ReasonPhrase};
+ use crate::data::DataStreamResetCode;
+@@ -88,6 +93,12 @@ pub(super) struct ObjectForwarder {
+     state: State<ObjectForwarderState>,
+     track_alias: u64,
+     mlog: Option<Arc<Mutex<mlog::MlogWriter>>>,
++    subgroup_timeout: Option<Duration>,
++    subgroup_skip: bool,
++    resync_observer: Option<Arc<dyn Fn(usize) + Send + Sync>>,
++    write_policy: Option<super::SharedWritePolicy>,
++    track_priority: u8,
++    session_budget: Option<(serve::ByteBudget, usize)>,
+ }
+ 
+ impl ObjectForwarder {
+@@ -102,6 +113,12 @@ impl ObjectForwarder {
+             state: send,
+             track_alias,
+             mlog,
++            subgroup_timeout: None,
++            subgroup_skip: false,
++            resync_observer: None,
++            write_policy: None,
++            track_priority: 128,
++            session_budget: None,
+         };
+         let recv = ObjectForwarderRecv { state: recv };
+         (send, recv)
+@@ -167,6 +184,12 @@ impl ObjectForwarder {
+                 self.serve_subgroups(subgroups, delivery_filter).await
+             }
+             TrackReaderMode::Datagrams(datagrams) => {
++                if self.write_policy.is_some() || self.session_budget.is_some() {
++                    return Err(ServeError::not_implemented_ctx(
++                        "resource policy requires subgroup streams",
++                    )
++                    .into());
++                }
+                 self.serve_datagrams(datagrams, delivery_filter).await
+             }
+         }
+@@ -193,6 +216,7 @@ struct SubgroupStream {
+     /// Set once the stream has been acknowledged or reset, after which
+     /// `Drop` must not touch it again.
+     terminated: bool,
++    expiry_reset: Option<Arc<AtomicBool>>,
+ }
+ 
+ impl SubgroupStream {
+@@ -200,6 +224,7 @@ impl SubgroupStream {
+         Self {
+             writer,
+             terminated: false,
++            expiry_reset: None,
+         }
+     }
+ 
+@@ -235,7 +260,16 @@ impl Drop for SubgroupStream {
+         // dropping the forwarding future must not leave quinn to implicitly FIN
+         // a partially written subgroup. `Cancelled` is the right default because
+         // a dropped forwarding task means the subscription ended early.
+-        self.reset(DataStreamResetCode::Cancelled);
++        let code = if self
++            .expiry_reset
++            .as_ref()
++            .is_some_and(|flag| flag.load(Ordering::Acquire))
++        {
++            DataStreamResetCode::DeliveryTimeout
++        } else {
++            DataStreamResetCode::Cancelled
++        };
++        self.reset(code);
+     }
+ }
+ 
+@@ -379,6 +413,50 @@ impl SubgroupOutput {
+ }
+ 
+ impl Subscribed {
++    /// Embedder-supplied media scheduling and conservative retained-group budget.
++    pub fn with_resources(
++        mut self,
++        policy: Option<super::SharedWritePolicy>,
++        budget: Option<(serve::ByteBudget, usize)>,
++    ) -> Self {
++        self.forwarder.track_priority = self.info.subscriber_priority;
++        self.forwarder.write_policy = policy;
++        self.forwarder.session_budget = budget;
++        self
++    }
++
++    /// Bound each subgroup's forwarding lifetime, from observation by this
++    /// forwarder through FIN acknowledgement, including stream-open waits.
++    ///
++    /// The embedder selects the resource policy. This is local elapsed time,
++    /// not an original-publisher timestamp or the negotiated DELIVERY_TIMEOUT.
++    /// By default expiry ends this subscription with draft-16 §9.15
++    /// TOO_FAR_BEHIND. An eligible embedder may instead enable live resync.
++    pub fn with_subgroup_timeout(mut self, timeout: Option<Duration>) -> Self {
++        self.forwarder.subgroup_timeout = timeout;
++        self
++    }
++
++    /// On configured lifetime expiry, abandon pending subgroups and wait for
++    /// a new group instead of terminating the subscription. The embedder must
++    /// establish that downstream delivery-timeout semantics permit this action
++    /// (draft-16 §9.2.2.2). This is a local group-age policy, not the full
++    /// per-object delivery timer defined by that section.
++    pub fn with_subgroup_skip(mut self, enabled: bool) -> Self {
++        self.forwarder.subgroup_skip = enabled;
++        self
++    }
++
++    /// Observe each live resynchronization with its number of abandoned tracked
++    /// forwarding/FIN-ACK work items. This is not a payload or object-loss count.
++    pub fn with_subgroup_resync_observer(
++        mut self,
++        observer: Arc<dyn Fn(usize) + Send + Sync>,
++    ) -> Self {
++        self.forwarder.resync_observer = Some(observer);
++        self
++    }
++
+     pub(super) fn new(
+         publisher: Publisher,
+         msg: message::Subscribe,
+@@ -519,7 +597,7 @@ impl Subscribed {
+             | ServeError::Size
+             | ServeError::NotImplemented(_)
+             | ServeError::NotImplementedWithId(_, _) => RequestErrorCode::NotSupported as u64,
+-            ServeError::Internal(_) | ServeError::InternalWithId(_, _) => {
++            ServeError::Internal(_) | ServeError::InternalWithId(_, _) | ServeError::Reset(_) => {
+                 RequestErrorCode::InternalError as u64
+             }
+         }
+@@ -533,7 +611,57 @@ impl Subscribed {
+     }
+ }
+ 
++/// Preserve one absolute deadline across stream opening, writing, and FIN ACK.
++/// Dropping a timed-out write/ACK future drops its existing stream reset guard.
++#[cfg(test)]
++async fn with_subgroup_deadline<T>(
++    deadline: Option<Instant>,
++    future: impl Future<Output = Result<T, SessionError>>,
++) -> Result<T, SessionError> {
++    with_subgroup_deadline_and_reset(deadline, None, future).await
++}
++
++async fn with_subgroup_deadline_and_reset<T>(
++    deadline: Option<Instant>,
++    expiry_reset: Option<Arc<AtomicBool>>,
++    future: impl Future<Output = Result<T, SessionError>>,
++) -> Result<T, SessionError> {
++    // Keep the underlying future alive until the reset reason is recorded.
++    // Passing it by value to timeout_at would drop its guard too early.
++    tokio::pin!(future);
++    match deadline {
++        Some(deadline) => match timeout_at(deadline, &mut future).await {
++            Ok(result) => result,
++            Err(_) => {
++                if let Some(flag) = expiry_reset {
++                    flag.store(true, Ordering::Release);
++                }
++                Err(ServeError::Closed(message::PublishDoneCode::TooFarBehind as u64).into())
++            }
++        },
++        None => future.await,
++    }
++}
++
++fn is_too_far_behind(error: &SessionError) -> bool {
++    matches!(error, SessionError::Serve(ServeError::Closed(code))
++        if *code == message::PublishDoneCode::TooFarBehind as u64)
++}
++
+ impl ObjectForwarder {
++    fn reserve_group(&self) -> Result<Option<serve::BudgetLease>, SessionError> {
++        self.session_budget
++            .as_ref()
++            .map(|(budget, size)| {
++                budget.try_reserve(*size).map_err(|_| {
++                    SessionError::from(ServeError::Closed(
++                        message::PublishDoneCode::TooFarBehind as u64,
++                    ))
++                })
++            })
++            .transpose()
++    }
++
+     async fn serve_subgroups(
+         &mut self,
+         mut subgroups: serve::SubgroupsReader,
+@@ -542,66 +670,138 @@ impl ObjectForwarder {
+         let mut tasks = FuturesUnordered::new();
+         let mut acknowledgements = FuturesUnordered::new();
+         let mut done: Option<Result<(), ServeError>> = None;
++        let mut expiry_reset = Arc::new(AtomicBool::new(false));
++        let mut newest_observed_group: Option<u64> = None;
++        let mut skip_through_group: Option<u64> = None;
+ 
+         loop {
++            let mut resync = false;
+             tokio::select! {
+                 biased;
+                 res = self.closed(), if done.is_none() || !tasks.is_empty() || !acknowledgements.is_empty() => {
+-                    // Both sets own reset guards, including streams with FIN queued.
+                     return res.map_err(SessionError::from);
+                 },
+                 // Reap ready waiters before checking the ACK budget on handoff.
+                 res = acknowledgements.next(), if !acknowledgements.is_empty() => {
+                     if let Some(Err(err)) = res {
+-                        tracing::debug!(error = %err, "subgroup stream closed before FIN acknowledgement");
++                        if self.subgroup_timeout.is_some() && is_too_far_behind(&err) {
++                            if self.subgroup_skip && expiry_reset.load(Ordering::Acquire) {
++                                resync = true;
++                            } else { return Err(err); }
++                        } else {
++                            tracing::debug!(error = %err, "subgroup stream closed before FIN acknowledgement");
++                        }
+                     }
+                 },
+                 res = subgroups.next(), if done.is_none() && tasks.len() < MAX_CONCURRENT_SUBGROUPS => match res {
+                     Ok(Some(subgroup)) => {
++                        newest_observed_group = Some(newest_observed_group.map_or(subgroup.group_id, |id| id.max(subgroup.group_id)));
++                        // Do not reopen a subgroup, or resume another subgroup in
++                        // the same discarded media group after resynchronization.
++                        if skip_through_group.is_some_and(|id| subgroup.group_id <= id) { continue; }
+                         let header = data::SubgroupHeader {
+-                            header_type: data::StreamHeaderType::SubgroupIdExt,  // SubGroupId = Yes, Extensions = Yes, ContainsEndOfGroup = No
++                            header_type: data::StreamHeaderType::SubgroupIdExt,
+                             track_alias: self.track_alias,
+                             group_id: subgroup.group_id,
+                             subgroup_id: Some(subgroup.subgroup_id),
+                             publisher_priority: subgroup.priority,
+                         };
+-
+                         let publisher = self.publisher.clone();
+                         let state = self.state.clone();
+                         let info = subgroup.info.clone();
+                         let mlog = self.mlog.clone();
+                         let session_id = self.publisher.session_id().clone();
+-
++                        let observed = Instant::now();
++                        let deadline = self.subgroup_timeout.map(|duration|
++                            observed.checked_add(duration).unwrap_or(observed));
++                        let reset = self.subgroup_skip.then(|| expiry_reset.clone());
++                        let lease = self.reserve_group()?;
++                        let policy = self.write_policy.clone();
++                        let track_priority = self.track_priority;
+                         tasks.push(async move {
+-                            let res = Self::serve_subgroup(header, subgroup, publisher, state, mlog, delivery_filter).await;
++                            let _lease = lease;
++                            let res = with_subgroup_deadline_and_reset(deadline, reset.clone(),
++                                Self::serve_subgroup(header, subgroup, publisher, state, mlog, delivery_filter, reset, policy, track_priority)).await;
+                             if let Err(err) = &res {
+-                                if Subscribed::is_expected_serve_shutdown(err) {
++                                if deadline.is_some() && is_too_far_behind(err) {
++                                    tracing::info!(session_id = %session_id, subgroup_info = ?info,
++                                        elapsed_ms = observed.elapsed().as_millis() as u64,
++                                        stage = "forward", "subgroup forwarding lifetime expired");
++                                } else if Subscribed::is_expected_serve_shutdown(err) {
+                                     tracing::debug!(session_id = %session_id, subgroup_info = ?info, error = %err, "stopped serving subgroup");
+                                 } else {
+                                     tracing::warn!(session_id = %session_id, subgroup_info = ?info, error = %err, "failed to serve subgroup");
+                                 }
+                             }
+-                            res
++                            (res, deadline, observed, session_id, info)
+                         });
+                     },
+                     Ok(None) => done = Some(Ok(())),
+                     Err(err) => done = Some(Err(err)),
+                 },
+                 res = tasks.next(), if !tasks.is_empty() => {
+-                    if let Some(Ok(Some(mut output))) = res {
+-                        if acknowledgements.len() == MAX_PENDING_SUBGROUP_ACKS {
+-                            // Do not silently forget a FIN handle: it would no
+-                            // longer respond to STOP or subscription cancellation.
+-                            // End this subscription instead. Dropping both sets
+-                            // resets all retained streams with Cancelled, trading
+-                            // continued delivery for a hard resource bound.
+-                            return Err(ServeError::Closed(message::PublishDoneCode::TooFarBehind as u64).into());
++                    if let Some((result, deadline, observed, session_id, info)) = res {
++                        match result {
++                            Ok(Some(mut output)) => {
++                                if acknowledgements.len() == MAX_PENDING_SUBGROUP_ACKS {
++                                    // Keep the existing hard guard: forgetting a FIN
++                                    // handle would leave buffered data uncancellable.
++                                    // Only lifetime expiry invokes live resync.
++                                    return Err(ServeError::Closed(message::PublishDoneCode::TooFarBehind as u64).into());
++                                }
++                                let reset = self.subgroup_skip.then(|| expiry_reset.clone());
++                                acknowledgements.push(async move {
++                                    let result = with_subgroup_deadline_and_reset(deadline, reset, output.acknowledged()).await;
++                                    if let Err(error) = &result {
++                                        if is_too_far_behind(error) {
++                                            tracing::info!(session_id = %session_id, subgroup_info = ?info,
++                                                elapsed_ms = observed.elapsed().as_millis() as u64,
++                                                stage = "fin_ack", "subgroup forwarding lifetime expired");
++                                        }
++                                    }
++                                    result
++                                });
++                            },
++                            Err(error) if deadline.is_some() && is_too_far_behind(&error) => {
++                                if self.subgroup_skip && expiry_reset.load(Ordering::Acquire) {
++                                    resync = true;
++                                } else { return Err(error); }
++                            },
++                            _ => {},
+                         }
+-                        acknowledgements.push(async move { output.acknowledged().await });
+                     }
+                 },
+                 else => return Ok(done.unwrap()?),
+             }
++            if resync {
++                // Include the triggering task, already removed by next(). The
++                // count is exact for tracked work items, not delivered Objects.
++                let abandoned = tasks.len() + acknowledgements.len() + 1;
++                expiry_reset.store(true, Ordering::Release);
++                tasks.clear();
++                acknowledgements.clear();
++                // Advance past any currently cached but unobserved subgroup.
++                // Never wait here: resumption needs a group arriving afterwards.
++                match subgroups.next().now_or_never() {
++                    Some(Ok(Some(subgroup))) => {
++                        newest_observed_group = Some(
++                            newest_observed_group
++                                .map_or(subgroup.group_id, |id| id.max(subgroup.group_id)),
++                        );
++                    }
++                    Some(Ok(None)) => done = Some(Ok(())),
++                    Some(Err(err)) => done = Some(Err(err)),
++                    None => {}
++                }
++                skip_through_group = newest_observed_group;
++                if let Some(observer) = &self.resync_observer {
++                    observer(abandoned);
++                }
++                tracing::info!(session_id = %self.publisher.session_id(), track_alias = self.track_alias,
++                    abandoned_tracked_subgroups = abandoned, skip_through_group,
++                    "subscription resynchronized after subgroup expiry");
++                expiry_reset = Arc::new(AtomicBool::new(false));
++            }
+         }
+     }
+ 
+@@ -612,6 +812,9 @@ impl ObjectForwarder {
+         state: State<ObjectForwarderState>,
+         mlog: Option<Arc<Mutex<mlog::MlogWriter>>>,
+         delivery_filter: DeliveryFilter,
++        expiry_reset: Option<Arc<AtomicBool>>,
++        policy: Option<super::SharedWritePolicy>,
++        track_priority: u8,
+     ) -> Result<Option<SubgroupOutput>, SessionError> {
+         tracing::trace!(
+             "[PUBLISHER] serve_subgroup: starting - group_id={}, subgroup_id={:?}, priority={}",
+@@ -637,8 +840,16 @@ impl ObjectForwarder {
+         // TODO figure out u32 vs u64 priority
+         send_stream.set_priority(subgroup_reader.priority as i32);
+ 
+-        let mut output =
+-            SubgroupOutput::stream(Writer::new(publisher.session_id().clone(), send_stream));
++        let mut output = SubgroupOutput::stream(
++            Writer::new(publisher.session_id().clone(), send_stream).with_policy(policy.map(|p| {
++                p.stream((u16::from(track_priority) << 8) | u16::from(subgroup_reader.priority))
++            })),
++        );
++        match &mut output.sink {
++            SubgroupSink::Stream(stream) => stream.expiry_reset = expiry_reset,
++            #[cfg(test)]
++            SubgroupSink::Buffer { .. } => {}
++        }
+         let res = Self::serve_subgroup_objects(
+             header,
+             subgroup_reader,
+@@ -1036,6 +1247,64 @@ impl ObjectForwarderRecv {
+ mod tests {
+     use super::*;
+ 
++    #[tokio::test]
++    async fn subgroup_timeout_none_preserves_completion_and_error() {
++        let result = with_subgroup_deadline(None, async {
++            tokio::time::sleep(Duration::from_millis(5)).await;
++            Ok::<_, SessionError>(17)
++        })
++        .await;
++        assert_eq!(result.unwrap(), 17);
++        let error = with_subgroup_deadline(None, async {
++            Err::<(), _>(SessionError::Serve(ServeError::Cancel))
++        })
++        .await
++        .unwrap_err();
++        assert!(matches!(error, SessionError::Serve(ServeError::Cancel)));
++    }
++
++    #[tokio::test]
++    async fn subgroup_timeout_drops_blocked_forwarding_future() {
++        use std::sync::atomic::{AtomicBool, Ordering};
++        struct Guard(Arc<AtomicBool>);
++        impl Drop for Guard {
++            fn drop(&mut self) {
++                self.0.store(true, Ordering::SeqCst);
++            }
++        }
++        let dropped = Arc::new(AtomicBool::new(false));
++        let guard = Guard(dropped.clone());
++        let error = with_subgroup_deadline(
++            Some(Instant::now() + Duration::from_millis(5)),
++            async move {
++                let _guard = guard;
++                std::future::pending::<Result<(), SessionError>>().await
++            },
++        )
++        .await
++        .unwrap_err();
++        assert!(is_too_far_behind(&error));
++        assert!(dropped.load(Ordering::SeqCst));
++    }
++
++    #[tokio::test]
++    async fn subgroup_timeout_ack_phase_keeps_original_deadline() {
++        let deadline = Instant::now() + Duration::from_millis(5);
++        with_subgroup_deadline(Some(deadline), async { Ok::<_, SessionError>(()) })
++            .await
++            .unwrap();
++        // Simulate a delayed handoff: a fresh ACK-stage budget would incorrectly
++        // allow this future to complete after the original lifetime expired.
++        tokio::time::sleep_until(deadline + Duration::from_millis(1)).await;
++        let error = with_subgroup_deadline(Some(deadline), async {
++            tokio::time::sleep(Duration::from_millis(20)).await;
++            Ok::<_, SessionError>(())
++        })
++        .await
++        .unwrap_err();
++        assert!(is_too_far_behind(&error));
++    }
++
+     #[test]
+     fn subscribed_state_counts_opened_streams() {
+         let mut state = ObjectForwarderState::default();
+diff --git a/moq-transport/src/session/subscriber.rs b/moq-transport/src/session/subscriber.rs
+index cbd1726..91dc1a7 100644
+--- a/moq-transport/src/session/subscriber.rs
++++ b/moq-transport/src/session/subscriber.rs
+@@ -32,9 +32,36 @@ use super::{
+ // Default timeout for waiting for subscribe aliases to become available via SUBSCRIBE_OK (1 second)
+ const DEFAULT_ALIAS_WAIT_TIME_MS: u64 = 1000;
+ 
++/// Inspect the backend's typed data-stream reset, never text, a stream close,
++/// or an Object-size/decode error. Keep the original SessionError for the
++/// session driver's existing stream-local error handling.
++fn data_stream_reset_code(error: &SessionError) -> Option<u32> {
++    #[cfg(any(not(target_arch = "wasm32"), target_os = "wasi"))]
++    if let SessionError::WebTransport(web_transport::Error::Read(
++        web_transport::quinn::ReadError::Reset(code),
++    )) = error
++    {
++        return Some(*code);
++    }
++    #[cfg(all(target_arch = "wasm32", not(target_os = "wasi")))]
++    let _ = error;
++    None
++}
++
++fn close_reset_subgroup(writer: &mut Option<serve::SubgroupWriter>, error: &SessionError) {
++    if let Some(code) = data_stream_reset_code(error) {
++        if let Some(writer) = writer.take() {
++            // Readers may already have gone away. Preserve the original
++            // transport cause even when there is nobody left to notify.
++            let _ = writer.close(ServeError::Reset(code));
++        }
++    }
++}
++
+ // TODO remove Clone.
+ #[derive(Clone)]
+ pub struct Subscriber {
++    payload_budget: Arc<Mutex<Option<(usize, Option<serve::ByteBudget>)>>>,
+     /// Active inbound PUBLISH_NAMESPACE messages, keyed by namespace.
+     published_namespaces: Arc<Mutex<HashMap<TrackNamespace, PublishedNamespaceRecv>>>,
+ 
+@@ -235,6 +262,15 @@ impl SubscriberNameRegistry {
+ }
+ 
+ impl Subscriber {
++    /// Configure the subgroup cache admission boundary for this receiving session.
++    pub fn set_payload_budget(
++        &self,
++        maximum_group_bytes: usize,
++        global: Option<serve::ByteBudget>,
++    ) {
++        *self.payload_budget.lock().unwrap() = Some((maximum_group_bytes, global));
++    }
++
+     #[cfg(test)]
+     pub(super) fn new(
+         outgoing: Queue<Message>,
+@@ -268,6 +304,7 @@ impl Subscriber {
+         session_lifetime: CancellationToken,
+     ) -> Self {
+         Self {
++            payload_budget: Default::default(),
+             published_namespaces: Default::default(),
+             published_namespace_queue: Default::default(),
+             subscribes: Default::default(),
+@@ -1498,12 +1535,26 @@ impl Subscriber {
+         let mut previous_object_id: Option<u64> = None;
+         let mut subgroup_writer: Option<serve::SubgroupWriter> = None;
+ 
+-        while !reader.done().await? {
++        loop {
++            match reader.done().await {
++                Ok(true) => break,
++                Ok(false) => {}
++                Err(error) => {
++                    close_reset_subgroup(&mut subgroup_writer, &error);
++                    return Err(error);
++                }
++            }
+             // Decode the object header.  Extension-header variant carries extra
+             // relay-visible fields; plain variant does not.
+             let (mut remaining_bytes, object_id_delta, status, decoded_object) =
+                 if stream_header_type.has_extension_headers() {
+-                    let object = reader.decode::<data::SubgroupObjectExt>().await?;
++                    let object = match reader.decode::<data::SubgroupObjectExt>().await {
++                        Ok(object) => object,
++                        Err(error) => {
++                            close_reset_subgroup(&mut subgroup_writer, &error);
++                            return Err(error);
++                        }
++                    };
+                     tracing::trace!(
+                         "[SUBSCRIBER] recv_subgroup_objects: object #{} with ext headers \
+                          object_id_delta={} payload={} status={:?} ext={:?}",
+@@ -1534,7 +1585,13 @@ impl Subscriber {
+                         Some(obj_copy),
+                     )
+                 } else {
+-                    let object = reader.decode::<data::SubgroupObject>().await?;
++                    let object = match reader.decode::<data::SubgroupObject>().await {
++                        Ok(object) => object,
++                        Err(error) => {
++                            close_reset_subgroup(&mut subgroup_writer, &error);
++                            return Err(error);
++                        }
++                    };
+                     tracing::trace!(
+                         "[SUBSCRIBER] recv_subgroup_objects: object #{} \
+                          object_id_delta={} payload={} status={:?}",
+@@ -1618,11 +1675,21 @@ impl Subscriber {
+ 
+             // Write the object payload.
+             // TODO SLG - object_id_delta and object status are still being ignored
+-            let subgroup_writer = subgroup_writer.as_mut().ok_or(SessionError::Internal)?;
+-            let mut object_writer = subgroup_writer.create(remaining_bytes, extension_headers)?;
++            let writer = subgroup_writer.as_mut().ok_or(SessionError::Internal)?;
++            let mut object_writer = writer.create(remaining_bytes, extension_headers)?;
+ 
+             while remaining_bytes > 0 {
+-                let chunk = reader.read_chunk(remaining_bytes).await?.ok_or_else(|| {
++                let chunk = match reader.read_chunk(remaining_bytes).await {
++                    Ok(chunk) => chunk,
++                    Err(error) => {
++                        if let Some(code) = data_stream_reset_code(&error) {
++                            let _ = object_writer.abort(ServeError::Reset(code));
++                            close_reset_subgroup(&mut subgroup_writer, &error);
++                        }
++                        return Err(error);
++                    }
++                }
++                .ok_or_else(|| {
+                     tracing::error!(
+                         session_id = %session_id,
+                         "[SUBSCRIBER] recv_subgroup_objects: stream ended with {} bytes remaining",
+@@ -1662,6 +1729,7 @@ impl Subscriber {
+     ) -> Result<(), SessionError> {
+         let subscribes = self.subscribes.clone();
+         let publishes_received = self.publishes_received.clone();
++        let payload_budget = self.payload_budget.lock().unwrap().clone();
+         Self::recv_subgroup_objects(
+             self.session_id.clone(),
+             stream_header_type,
+@@ -1677,7 +1745,11 @@ impl Subscriber {
+                             subscribe_id, header.track_alias
+                         )))
+                     })?;
+-                    Ok(recv.subgroup(header)?)
++                    let mut writer = recv.subgroup(header)?;
++                    if let Some((maximum, pool)) = &payload_budget {
++                        writer.configure_budget(*maximum, pool.clone())?;
++                    }
++                    Ok(writer)
+                 }
+                 TrackOrigin::Publish(publish_id) => {
+                     let mut map = publishes_received
+@@ -1689,7 +1761,11 @@ impl Subscriber {
+                             publish_id, header.track_alias
+                         )))
+                     })?;
+-                    Ok(recv.subgroup(header)?)
++                    let mut writer = recv.subgroup(header)?;
++                    if let Some((maximum, pool)) = &payload_budget {
++                        writer.configure_budget(*maximum, pool.clone())?;
++                    }
++                    Ok(writer)
+                 }
+             },
+         )
+@@ -1698,6 +1774,11 @@ impl Subscriber {
+ 
+     /// Handle reception of a datagram from the QUIC session.
+     pub async fn recv_datagram(&mut self, datagram: bytes::Bytes) -> Result<(), SessionError> {
++        if self.payload_budget.lock().unwrap().is_some() {
++            return Err(
++                ServeError::not_implemented_ctx("bounded cache requires subgroup streams").into(),
++            );
++        }
+         let mut cursor = io::Cursor::new(datagram);
+         let datagram = data::Datagram::decode(&mut cursor)?;
+ 
+@@ -2445,3 +2526,219 @@ mod tests {
+         assert!(observer.track_alias_map.lock().unwrap().is_empty());
+     }
+ }
++
++#[cfg(all(test, any(not(target_arch = "wasm32"), target_os = "wasi")))]
++mod data_reset_tests {
++    use super::*;
++    use bytes::Bytes;
++    use web_transport::quinn::{self as wt, quinn};
++
++    struct Incoming {
++        send: web_transport::SendStream,
++        task: tokio::task::JoinHandle<Result<(), SessionError>>,
++        subgroup: serve::SubgroupReader,
++        _sessions: (web_transport::Session, web_transport::Session),
++        _endpoints: (quinn::Endpoint, quinn::Endpoint),
++    }
++
++    async fn incoming(payload: &[u8]) -> Incoming {
++        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
++        let cert = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
++        let mut server_crypto = rustls::ServerConfig::builder()
++            .with_no_client_auth()
++            .with_single_cert(
++                vec![cert.cert.der().clone()],
++                cert.key_pair.serialize_der().try_into().unwrap(),
++            )
++            .unwrap();
++        server_crypto.alpn_protocols = vec![b"moqt-16".to_vec()];
++        let config = quinn::ServerConfig::with_crypto(Arc::new(
++            quinn::crypto::rustls::QuicServerConfig::try_from(server_crypto).unwrap(),
++        ));
++        let server = quinn::Endpoint::server(config, "127.0.0.1:0".parse().unwrap()).unwrap();
++        let address = server.local_addr().unwrap();
++        let mut roots = rustls::RootCertStore::empty();
++        roots.add(cert.cert.der().clone()).unwrap();
++        let mut client_crypto = rustls::ClientConfig::builder()
++            .with_root_certificates(roots)
++            .with_no_client_auth();
++        client_crypto.alpn_protocols = vec![b"moqt-16".to_vec()];
++        let mut client = quinn::Endpoint::client("127.0.0.1:0".parse().unwrap()).unwrap();
++        client.set_default_client_config(quinn::ClientConfig::new(Arc::new(
++            quinn::crypto::rustls::QuicClientConfig::try_from(client_crypto).unwrap(),
++        )));
++        let connecting = client.connect(address, "localhost").unwrap();
++        let (sender, receiver) = tokio::time::timeout(Duration::from_secs(3), async {
++            tokio::join!(connecting, async { server.accept().await.unwrap().await })
++        })
++        .await
++        .unwrap();
++        let url = url::Url::parse(&format!("https://localhost:{}/", address.port())).unwrap();
++        let sender: web_transport::Session = wt::Session::raw(
++            sender.unwrap(),
++            url.clone(),
++            wt::proto::ConnectResponse::default(),
++        )
++        .into();
++        let receiver: web_transport::Session = wt::Session::raw(
++            receiver.unwrap(),
++            url,
++            wt::proto::ConnectResponse::default(),
++        )
++        .into();
++        let mut send = sender.open_uni().await.unwrap();
++        let mut remaining = payload;
++        while !remaining.is_empty() {
++            let written = send.write(remaining).await.unwrap();
++            assert_ne!(written, 0);
++            remaining = &remaining[written..];
++        }
++        let stream = tokio::time::timeout(Duration::from_secs(3), receiver.accept_uni())
++            .await
++            .unwrap()
++            .unwrap();
++        let info = serve::SubgroupInfo {
++            track: Arc::new(serve::Track::new(
++                TrackNamespace::from_utf8_path("reset-test"),
++                "video",
++            )),
++            group_id: 1,
++            subgroup_id: 0,
++            priority: 128,
++        };
++        let (writer, subgroup) = info.produce();
++        let mut writer = Some(writer);
++        let header = data::SubgroupHeader {
++            header_type: data::StreamHeaderType::SubgroupId,
++            track_alias: 0,
++            group_id: 1,
++            subgroup_id: Some(0),
++            publisher_priority: 128,
++        };
++        let session_id = SessionId::generate();
++        let reader = Reader::new(session_id.clone(), stream);
++        let task = tokio::spawn(Subscriber::recv_subgroup_objects(
++            session_id,
++            header.header_type,
++            header,
++            reader,
++            None,
++            move |_| writer.take().ok_or(SessionError::Internal),
++        ));
++        Incoming {
++            send,
++            task,
++            subgroup,
++            _sessions: (sender, receiver),
++            _endpoints: (server, client),
++        }
++    }
++
++    async fn receive_error(
++        task: &mut tokio::task::JoinHandle<Result<(), SessionError>>,
++    ) -> SessionError {
++        tokio::time::timeout(Duration::from_secs(3), task)
++            .await
++            .unwrap()
++            .unwrap()
++            .unwrap_err()
++    }
++
++    #[tokio::test]
++    async fn actual_reset_during_partial_object_preserves_code() {
++        for code in [2, 18] {
++            // Delta=0, promised length=4, only one payload byte supplied.
++            let mut input = incoming(&[0, 4, b'a']).await;
++            let mut object = tokio::time::timeout(Duration::from_secs(3), input.subgroup.next())
++                .await
++                .unwrap()
++                .unwrap()
++                .unwrap();
++            assert_eq!(
++                object.read().await.unwrap().unwrap(),
++                Bytes::from_static(b"a")
++            );
++            input.send.reset(code);
++            let error = receive_error(&mut input.task).await;
++            assert_eq!(data_stream_reset_code(&error), Some(code));
++            assert!(error.is_stream_error());
++            assert_eq!(
++                object.read_all().await.unwrap_err(),
++                ServeError::Reset(code)
++            );
++            assert_eq!(
++                input.subgroup.read_next().await.unwrap_err(),
++                ServeError::Reset(code)
++            );
++        }
++    }
++
++    #[tokio::test]
++    async fn actual_reset_after_complete_object_and_inside_next_header() {
++        for payload in [&[0, 1, b'a'][..], &[0, 1, b'a', 0x40][..]] {
++            // 0x40 starts a two-byte varint but omits its second byte.
++            let mut input = incoming(payload).await;
++            let complete = tokio::time::timeout(Duration::from_secs(3), input.subgroup.read_next())
++                .await
++                .unwrap()
++                .unwrap()
++                .unwrap();
++            assert_eq!(complete, Bytes::from_static(b"a"));
++            input.send.reset(2);
++            assert_eq!(
++                data_stream_reset_code(&receive_error(&mut input.task).await),
++                Some(2)
++            );
++            assert_eq!(
++                input.subgroup.read_next().await.unwrap_err(),
++                ServeError::Reset(2)
++            );
++        }
++    }
++
++    #[tokio::test]
++    async fn actual_fin_truncation_remains_size_error_not_reset() {
++        let mut input = incoming(&[0, 4, b'a']).await;
++        let mut object = tokio::time::timeout(Duration::from_secs(3), input.subgroup.next())
++            .await
++            .unwrap()
++            .unwrap()
++            .unwrap();
++        assert_eq!(
++            object.read().await.unwrap().unwrap(),
++            Bytes::from_static(b"a")
++        );
++        input.send.finish().unwrap();
++        let error = receive_error(&mut input.task).await;
++        assert!(matches!(error, SessionError::WrongSize));
++        assert_eq!(data_stream_reset_code(&error), None);
++        assert_eq!(object.read_all().await.unwrap_err(), ServeError::Size);
++    }
++
++    #[tokio::test]
++    async fn actual_truncated_or_invalid_header_is_not_reset() {
++        for payload in [&[0, 1, b'a', 0x40][..], &[0, 0, 2][..]] {
++            // The second input is an invalid object-status value, not a reset.
++            let mut input = incoming(payload).await;
++            input.send.finish().unwrap();
++            let error = receive_error(&mut input.task).await;
++            assert!(matches!(error, SessionError::Decode(_)));
++            assert_eq!(data_stream_reset_code(&error), None);
++        }
++    }
++
++    #[test]
++    fn only_a_typed_transport_reset_is_recognized() {
++        for error in [
++            SessionError::WrongSize,
++            SessionError::Serve(ServeError::Closed(2)),
++            SessionError::Serve(ServeError::Reset(2)),
++            SessionError::WebTransport(web_transport::Error::Read(wt::ReadError::ClosedStream)),
++            SessionError::WebTransport(web_transport::Error::Read(wt::ReadError::InvalidReset(
++                2u32.into(),
++            ))),
++        ] {
++            assert_eq!(data_stream_reset_code(&error), None);
++        }
++    }
++}
+diff --git a/moq-transport/src/session/write_policy.rs b/moq-transport/src/session/write_policy.rs
+new file mode 100644
+index 0000000..e785a41
+--- /dev/null
++++ b/moq-transport/src/session/write_policy.rs
+@@ -0,0 +1,29 @@
++// SPDX-FileCopyrightText: 2026 MoQT Relay Fairness project contributors
++// SPDX-License-Identifier: MIT OR Apache-2.0
++
++use super::SessionError;
++use std::{
++    sync::Arc,
++    task::{Context, Poll},
++};
++
++/// Embedder-owned scheduling. Only subgroup media writes use this hook;
++/// control streams remain independent so resource pressure cannot block cleanup.
++pub trait WritePolicy: Send + Sync {
++    fn stream(&self, priority: u16) -> Box<dyn ScheduledWrite>;
++}
++
++pub type WriteAttempt<'a> =
++    dyn FnMut(&mut Context<'_>, usize) -> Poll<Result<usize, SessionError>> + 'a;
++
++pub trait ScheduledWrite: Send + Sync {
++    /// Charge only the bytes accepted by the nonblocking transport attempt.
++    fn poll_write(
++        &mut self,
++        cx: &mut Context<'_>,
++        available: usize,
++        attempt: &mut WriteAttempt<'_>,
++    ) -> Poll<Result<usize, SessionError>>;
++}
++
++pub type SharedWritePolicy = Arc<dyn WritePolicy>;
+diff --git a/moq-transport/src/session/writer.rs b/moq-transport/src/session/writer.rs
+index 5558e04..537f6de 100644
+--- a/moq-transport/src/session/writer.rs
++++ b/moq-transport/src/session/writer.rs
+@@ -6,13 +6,16 @@ use std::io;
+ 
+ use crate::coding::{Encode, EncodeError};
+ 
++use super::ScheduledWrite;
+ use super::{SessionError, SessionId};
+ use bytes::Buf;
++use futures::{future::poll_fn, FutureExt};
+ 
+ pub struct Writer {
+     session_id: SessionId,
+     stream: web_transport::SendStream,
+     buffer: bytes::BytesMut,
++    policy: Option<Box<dyn ScheduledWrite>>,
+ }
+ 
+ impl Writer {
+@@ -26,9 +29,15 @@ impl Writer {
+             session_id,
+             stream,
+             buffer: Default::default(),
++            policy: None,
+         }
+     }
+ 
++    pub fn with_policy(mut self, policy: Option<Box<dyn ScheduledWrite>>) -> Self {
++        self.policy = policy;
++        self
++    }
++
+     /// The id of the session that owns this stream.
+     pub fn session_id(&self) -> &SessionId {
+         &self.session_id
+@@ -51,7 +60,25 @@ impl Writer {
+ 
+         let mut total_written = 0;
+         while !self.buffer.is_empty() {
+-            let written = self.stream.write_buf(&mut self.buffer).await?;
++            let written = if let Some(policy) = &mut self.policy {
++                let stream = &mut self.stream;
++                let buf = &self.buffer;
++                let n = poll_fn(|cx| {
++                    policy.poll_write(cx, buf.len(), &mut |cx, limit| {
++                        let future = stream.write(&buf[..limit]);
++                        tokio::pin!(future);
++                        future.poll_unpin(cx).map_err(SessionError::from)
++                    })
++                })
++                .await?;
++                if n == 0 {
++                    return Err(EncodeError::More(self.buffer.len()).into());
++                }
++                self.buffer.advance(n);
++                n
++            } else {
++                self.stream.write_buf(&mut self.buffer).await?
++            };
+             total_written += written;
+             tracing::trace!(
+                 "[WRITER] encode: wrote {} bytes to stream (total={}/{}, remaining={})",
+@@ -79,7 +106,22 @@ impl Writer {
+         let mut total_written = 0;
+ 
+         while cursor.has_remaining() {
+-            let size = self.stream.write_buf(&mut cursor).await?;
++            let size = if let Some(policy) = &mut self.policy {
++                let stream = &mut self.stream;
++                let buf = cursor.chunk();
++                let n = poll_fn(|cx| {
++                    policy.poll_write(cx, buf.len(), &mut |cx, limit| {
++                        let future = stream.write(&buf[..limit]);
++                        tokio::pin!(future);
++                        future.poll_unpin(cx).map_err(SessionError::from)
++                    })
++                })
++                .await?;
++                cursor.advance(n);
++                n
++            } else {
++                self.stream.write_buf(&mut cursor).await?
++            };
+             if size == 0 {
+                 tracing::error!(
+                     session_id = %self.session_id,
