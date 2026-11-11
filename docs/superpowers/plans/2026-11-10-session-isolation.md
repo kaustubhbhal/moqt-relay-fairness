@@ -13,7 +13,7 @@ Pinned upstream 3b2b584, cumulative isolated patch; no dirty vendor checkout. Fi
 - [x] Multi-track load: several tracks in one actual QUIC session, per-track events, aggregation by session, mixed demand and stall workloads.
 - [x] Reproducible build and focused real-QUIC comparison: identical binaries, cap, source, windows, durations; repeated conditions, no silent failure exclusion.
 - [x] PACE worker policy selection and combined-generator analysis readiness; local checks only.
-- [ ] Review, required upstream/root checks, frequent commits/pushes, report/table/diagram updates and rendered Google Doc verification.
+- [x] Review, required upstream/root checks, frequent commits/pushes, report/table/diagram updates and rendered Google Doc verification.
 
 ## Review focus
 No global-turn retention by a blocked write. No session splitting by track. No memory-release before last payload owner drops. No count limit presented as a byte limit without enforced group size. No per-session isolation or total-memory claim beyond the implemented accounting boundary.

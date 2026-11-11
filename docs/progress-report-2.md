@@ -6,171 +6,167 @@ Kaustubh Bhal, Shradha Gandotra, Rudra Kanani, Sanat Dhanyamraju, Alan Zhu
 
 November 10, 2026
 
-Our project looks at how a Media over QUIC Transport (MoQT) relay can share bandwidth and memory fairly across subscribers. Since Report I, we have built a local testbed, tested how stalled clients affect other subscribers, and implemented a way for them to return to current media without disconnecting. This report covers those results and our preparation for a comprehensive experiment on PACE ICE.
+Our project looks at how a Media over QUIC Transport (MoQT) relay can share bandwidth and memory fairly across subscribers. In Report I, we proposed two main changes: fair bandwidth scheduling across sessions and limits on the media each session can keep buffered. We have now implemented an initial version of both, built a local testbed, and run separate experiments to check what each change accomplishes. This report covers those results and the setup we have prepared for PACE ICE.
 
 ## 1. Problem Definition
 
 A MoQT relay receives media from a publisher and forwards it to many subscribers. Each subscriber has its own QUIC connection, but the connections share the relay's memory and outgoing bandwidth. When one subscriber stops keeping up, the relay may retain old media for it. Once that subscriber resumes, sending its backlog can compete with current media being delivered to other clients.
 
-Report I proposed both fair bandwidth scheduling and limits on buffered media. We started with stalled subscribers because they give us a controlled way to study both resources: their backlog can keep data in memory, and sending that backlog can consume bandwidth needed by other clients. Our immediate question was whether a policy that drops stale media could reduce those costs while still allowing stalled clients to recover.
+We are mainly focused on the two situations described in Report I. A subscriber requesting many tracks can compete for more bandwidth than a subscriber requesting one. A slow subscriber can keep old media in relay memory after other clients have finished with it. Our goal is to control these costs at the session level, so that adding tracks or falling behind does not give one connection an unrestricted share of the relay's resources.
 
 ## 2. Motivation
 
 Live media needs to arrive while it is still useful. A client receiving several seconds of old frames may have high throughput while remaining far behind the live stream. Sending that backlog also uses bandwidth that could carry current media to other subscribers.
 
-Disconnecting every slow client would avoid some of this work, but would also interrupt clients experiencing temporary slowdowns. We therefore want to distinguish between ending a subscription and dropping media that is already too old to be useful. Our experiments compare those choices.
+At the same time, immediately disconnecting every slow subscriber would be too aggressive, especially when a client only has a short slowdown. We want to share bandwidth fairly and put a clear limit on retained media, while checking what those limits cost in lost delivery and terminated subscriptions. The fixed limits in this report are a first step toward that balance.
 
 ## 3. Challenges
 
-The first challenge was making a client stall affect the relay. If we only slowed the final application reader, the client library could continue receiving and buffering data. We instead pause the client's MoQT session processing and use small receive buffers. As those buffers fill, the relay can no longer keep writing to that client. QUIC still processes packets and acknowledgments, so the connection remains open.
+Bandwidth and memory are connected. Giving a client less bandwidth can leave more data waiting for it, while sending its backlog faster can take capacity from other clients. We therefore need separate comparisons to understand each mechanism before testing them together.
 
-The second challenge was separating shared memory from memory used by individual connections. Several subscribers can reference the same media, so adding their queue sizes would count some payloads more than once. We traced the storage path to understand which data a stalled client can keep alive; the memory model is described below.
+Shared media also makes memory usage harder to measure. Several subscribers can reference the same Object, so adding their queue sizes would count some payload more than once. We need to distinguish the data a session keeps alive, the shared payload stored by the relay, and data already buffered inside QUIC.
 
-Finally, dropping old media must not make an incomplete Object look like a successful delivery. We changed the receiver to recognize intentional stream resets and continue reading later groups, while still treating malformed or truncated data as errors.
+Finally, a slow application reader does not automatically create backpressure at the relay: the client library can keep receiving data into its own buffers. For our memory tests, we pause the client's MoQT session processing and use small receive windows. QUIC still handles packets and acknowledgments, keeping the connection open while the relay's media writes become blocked.
 
 ## 4. Methodology
 
-Our hypothesis is that the relay can make better use of memory and bandwidth by stopping work on media that is already too old to be useful. To test this, we compare the same workload with no timeout, with subscription termination, and with stale-media skipping. We look for lower memory use and more timely delivery under the same bandwidth cap, while checking that the improvement does not come from disconnecting clients.
+We implemented the two controls from Report I in the same relay. DRR decides which session can hand media bytes to QUIC next. Fixed payload budgets decide how much media a session, and the shared store as a whole, can retain. We evaluate them separately below: first by creating bandwidth contention with a multi-track client, then by making one subscriber stall while the others continue receiving.
 
 ### Experimental platform and workload
 
 We built the testbed around Cloudflare's moq-rs relay, pinned at MoQT draft-16 revision 3b2b584. It has three processes: a publisher, the relay, and a generator that opens independent subscriber connections. We began on one machine so we could debug the implementation and repeat experiments before moving to PACE. The local configuration is shown below.
 
-The publisher generates synthetic media Objects, which are the units of data carried by MoQT. Each Object contains a sequence number, a generation timestamp, and a payload the receiver can verify. We send 30 Objects per second at about 4 Mbit/s. Every second starts a new group; in this workload, each group is sent on one QUIC stream, called a subgroup stream.
+The publisher generates synthetic media Objects, which are the units of data carried by MoQT. Each Object contains a sequence number, a generation timestamp, and a payload the receiver can verify. Each track sends 30 Objects per second at about 4 Mbit/s. Every second starts a new group; in this workload, each group is sent on one QUIC stream, called a subgroup stream. The multi-track workload uses the same source pattern on four tracks.
 
 This continuous one-to-many workload lets us control the source rate and measure both complete delivery and how old the data is when it arrives. A speed test alone would not show whether a client is receiving useful live data or old backlog. Encoded-video replay, including Big Buck Bunny from Report I, remains a later experiment.
 
-| **Setting** | **Local platform and workload** |
+| Setting | Local platform and workload |
 | --- | --- |
 | Hardware | Apple M2 Pro; 10 CPUs; 16 GiB RAM |
 | Operating system | macOS 15.3.1, ARM64 |
-| Processes | One relay, one publisher, one subscriber generator; four runtime worker threads each |
-| Source | 30 Objects/s, 16,666 bytes each; approximately 4 Mbit/s; one new group per second |
-| Subscribers | Independent QUIC sessions; 16 in policy comparisons, 16 or 64 in the initial baseline |
-| Receive limits | 64 KiB per connection, 32 KiB per stream, one incoming unidirectional stream |
-| Bandwidth limit | 80 Mbit/s of shared outgoing UDP payload, with a 64 KiB burst allowance |
-| Replication | Five runs per condition, with condition order shuffled within each repetition |
+| Processes | Three processes; four runtime worker threads each |
+| Source | 4 Mbit/s per track; 30 Objects/s; one-second groups |
+| Subscribers | Four QUIC sessions; one or four tracks per session |
+| Receive limits | Bandwidth: 8 MiB/connection, 2 MiB/stream, 64 streams. Memory: 64 KiB/connection, 32 KiB/stream, one stream |
+| Bandwidth limit | Application stream bytes: 12 Mbit/s for contention, 64 Mbit/s otherwise; 16 KiB burst |
+| Replication | Three repeats per main condition; two per control; shuffled policy order |
 
-### Relay modifications
+### Bandwidth scheduling across sessions
 
-We first ran the unchanged relay, then added a shared 80 Mbit/s outgoing UDP limit. Sixteen subscribers need about 64 Mbit/s of media before overhead, so normal delivery fits within the limit, while catch-up traffic can create contention. The limit includes QUIC headers, control traffic, and retransmissions. It creates a controlled bandwidth bottleneck; it doesn’t decide which connection gets a fair share.
+We added a shared application send-rate limit to create repeatable contention. Both comparison policies use this same limit. The baseline serves ready write requests in arrival order (FIFO); DRR instead gives each subscriber session a byte allowance before choosing which of its tracks to serve. This is an instrumented FIFO baseline, not the unchanged upstream relay.
 
-We implemented two new ways to handle old work.
+Our DRR scheduler gives each active session 16 KiB of credit per round and attempts writes of at most 8 KiB. All tracks on the same QUIC connection share those credits. Only bytes actually accepted by QUIC are charged. If a write is blocked by flow control, the scheduler can serve another session without spending the blocked session's credits. Within a session, ready streams are ordered by subscriber and publisher priority; existing QUIC stream priorities remain in place.
 
-1. The ‘terminate’ policy ends a subscription if forwarding one of its subgroups takes more than three seconds.
-
-2. The ‘skip’ policy uses the same threshold but resets the subscription's pending media streams and waits for a fresh group. The client permits this dropping and continues on its original connection and subscription.
-
-The timer starts when the relay's downstream forwarder observes the subgroup and includes waiting to open a stream, sending data, and waiting for the final acknowledgment. It therefore limits how long forwarding work remains active, rather than directly measuring the client's distance from the live stream. Note: It’s not a per-connection memory cap.
-
-We tested these changes with real QUIC connections, including expiry during stream opening, resets halfway through an Object, and delivery of a fresh group afterward. The Rust and client tests passed, as did 18 Python tests for the experiment and analysis tools. We also kept raw logs, source and binary hashes, and the commands needed to reproduce each accepted run.
+This gives us a direct test of the bandwidth part of our proposal. Under contention, a client requesting four tracks should receive roughly the same total share as another backlogged client requesting one. The current tests use equal track priorities and Object sizes; we have not yet evaluated mixed priorities or variable-sized media.
 
 ### Investigation: How a stalled client affects relay memory
 
-The relay uses memory in two main ways: storing media that subscribers share, and buffering data for each connection. In our testbed, the publisher generates media as it runs, so the relay does not load an original video file. It receives the Objects and stores them so several subscribers can read the same data.
+Part of being able to make progress in terms of memory contention was understanding how MoQ handles memory. Our investigation is outlined below.
 
-When the relay passes data to QUIC, each subscriber's connection also needs buffers for bytes waiting to be sent or acknowledged. Figure 1 shows these regions separately because a limit on one does not necessarily limit the others. [6]
+The relay uses memory in two main ways: storing media that subscribers share, and buffering data for each connection. In our testbed, the publisher generates media as it runs, so the relay does not load an original video file. It receives Objects and stores them so several subscribers can read the same data.
 
-![Memory ownership diagram](figures/memory-regions.png)
+When the relay passes data to QUIC, each subscriber's connection also needs buffers for bytes waiting to be sent or acknowledged. Figure 1 separates these regions and shows where we now enforce limits. A limit on one region does not automatically limit the others. [6]
 
-Figure 1. Where media is stored and which regions are shared. The numbers label configuration limits; they are not measurements of the maximum memory one connection consumes.
+![isolation-memory-regions.png](figures/isolation-memory-regions.png)
 
-A stalled client can prevent shared media from being freed even after healthy clients have finished with it. However, that does not mean every stalled client creates another copy. At our 4 Mbit/s source rate, 15 seconds of media contains about 7.5 MB of payload. If eight clients are waiting for the same segment, the shared store holds that payload once. Clients waiting for different segments or different tracks can keep additional data in memory.
+Figure 1. Memory ownership and the fixed limits used in our tests. Shared payload is stored once globally; per-session reservations track what each session may keep alive. The QUIC and OS regions are outside our new payload budgets.
 
-The amount one subscription can keep alive depends on the size of its groups. Our patched relay allows 128 active forwarding tasks per subscription. If each task holds one full group from our one-second-group workload, those groups contain about 64 MB of payload. This is an estimate for that specific situation, not an observed peak or a maximum for the whole connection. Larger groups would change the estimate. [6]
+A stalled client can prevent shared media from being freed even after healthy clients have finished with it. However, that does not mean every stalled client creates another copy. At our 4 Mbit/s source rate, 15 seconds of media contains about 7.5 MB of payload. Eight clients waiting for that same segment can share those bytes; clients waiting for different segments or tracks may retain additional data.
 
-QUIC has a separate limit: the tested relay uses a 10 MB send window per connection. That limits its accounting of outstanding stream data, but it does not include the shared media described above or all of the connection's other memory. We therefore cannot say that a connection uses at most 10 MB. We have not yet established a total per-connection memory bound, and our three-second timeout does not provide one. [6, 7]
+We now limit that retained payload using reservations. Before admitting a subgroup, the relay reserves 512 KiB in the shared pool and rejects payload that would exceed this size. Each session reserves one slot for each track's latest cached group, plus one for every group it is actively forwarding. All of a session's tracks share a 2 MiB budget. The shared pool has a separate 8 MiB budget, counting each subgroup once regardless of how many subscribers use it.
 
-This investigation identifies two places where a memory policy needs to act: shared media retained by old forwarding tasks, and each connection's QUIC buffers. Skipping old work can release references to shared media, but the savings depend on whether other clients still need that data and when buffers are freed. Our local RSS measurements test whether total process memory falls. Measuring the individual regions next will show where that reduction comes from. Comparing clients that retain the same data with clients that retain different data will also tell us how many are needed to create memory pressure.
+For a single-track session, 2 MiB fits one cache slot and three forwarding slots. If starting another forwarding task would exceed the budget, the relay ends the affected subscription with TOO_FAR_BEHIND and releases its references. This is the fixed-limit eviction proposed in Report I. It is triggered by retained-payload reservations; the earlier timeout experiments are not enabled in these comparisons.
+
+These reservations deliberately overestimate payload use: a partly filled group still consumes a whole slot, and a session can charge the same shared group through more than one reference. That gives us a simple bound to enforce before buffering more data. It does not mean a session physically allocates 2 MiB, or that the relay's total memory stays below 8 MiB.
+
+QUIC remains separate. The tested relay uses a 10 MB outstanding-stream send window per connection, but this accounting excludes other connection state and the shared application media. Our 2 MiB payload bound therefore cannot be added to that window to claim an exact total-memory bound. We measure the relay's resident memory (RSS) separately to check whether controlled retention also reduces the process footprint. [6, 7]
+
+This distinction also affects scale. A 2 MiB payload budget would allow at most 200 MiB of summed session reservations across 100 sessions, or about 1.95 GiB across 1,000; sharing can make physical payload use much smaller, and our 8 MiB global test cap further restricts it. Four local clients are enough to test whether a limit activates correctly. Showing substantial server memory pressure will require more clients or less overlap in the media they retain.
 
 ## 5. Related Work
 
-PicNIC: Predictable Virtualized NIC studies how virtual machines sharing a server can interfere with one another's network performance. Its design combines fair queuing, receiver-driven congestion control, and sender-side shaping and accounting. The relevant lesson for our project is that controlling bandwidth alone does not isolate every shared resource. MoQT adds two complications: old media loses value, and several subscribers may share the same payload. Our current work examines those complications through stale-media handling and memory ownership; it does not implement PicNIC's scheduler. [1]
+PicNIC: Predictable Virtualized NIC studies how virtual machines sharing a server can interfere with one another's network performance. Its design combines fair queuing, receiver-driven congestion control, and sender-side shaping and accounting. The relevant lesson for us is that controlling bandwidth alone does not isolate every shared resource. We follow that principle by combining scheduling with separate admission budgets. MoQT adds shared media payloads and delivery deadlines, so we account for shared groups separately from each session's references. We do not implement PicNIC's congestion-control system. [1]
 
-Media over QUIC: Initial Testing, Findings and Results provides an early experimental study of MoQ. The authors' companion testbed includes feedback and bandwidth measurements. Our work focuses on a different part of the delivery path: what happens when subscribers sharing one relay stall and then catch up. We use synthetic Objects to isolate that behavior before introducing video encoding and playback. [2]
+Media over QUIC: Initial Testing, Findings and Results provides an early experimental study of MoQ. The authors' companion testbed includes feedback and bandwidth measurements. Our work focuses on resource contention among subscribers sharing one relay. We use synthetic Objects to control the offered load and isolate the scheduling and buffering behavior before introducing video encoding and playback. [2]
 
-Efficient Fair Queuing Using Deficit Round-Robin provides the scheduling baseline proposed in Report I. DRR gives each backlogged flow a credit measured in bytes and carries unused credit into later rounds. We plan to use subscriber sessions as the flows. However, receiving a fair share of bytes does not necessarily bring a client back to live media, so we will compare DRR alone with DRR plus stale-media skipping. DRR has not yet been implemented. [3]
+Efficient Fair Queuing Using Deficit Round-Robin provides the scheduling algorithm proposed in Report I and now implemented in our relay. DRR gives each backlogged flow a credit measured in bytes and carries unused credit into later rounds. We use subscriber sessions as the flows, with all of a session's tracks sharing one credit balance. Our additional work is integrating this with QUIC write blocking and retained-media budgets. Fair byte allocation alone does not guarantee timely media delivery, which remains part of our evaluation. [3]
 
 ## 6. Evaluation Results and Next Steps
 
 ### Measurements
 
-Our tests build evidence in stages. The unchanged relay establishes how stalled clients fall behind and catch up. The capped comparisons test whether handling that backlog differently improves delivery when bandwidth is limited. Comparing memory use and recovery then checks whether a policy reduces resource use while continuing to serve those clients.
+We designed the new experiments around the two claims from Report I. For bandwidth, we ask whether DRR stops a multi-track session from taking extra shares under contention. For memory, we ask whether a fixed session budget bounds retained payload while healthy clients continue receiving. Table 1 shows the comparisons. All use the same patched relay and matching client build; we change one policy at a time.
 
-We completed 115 local runs across these experiments. Each condition has five repetitions, with the order shuffled within each repetition. Unless stated otherwise, we report the median of the five runs.
+Each run lasts 15 seconds. We measure throughput over seconds 3–15, summing every track on each client's original QUIC connection. Clients that terminate or receive nothing remain in the calculation for the full interval. We record Object latency, payload arriving within 150 ms, current and peak payload reservations, subscription terminations, and the relay's sampled RSS. RSS peaks cover the full run and are sampled about once per second.
 
-We use two measures to check whether clients receive useful live media. Latency is the time from Object generation to a complete receiver read; P99 is the latency at or below which 99% of received Objects arrive. Timely goodput counts only payload delivered within 150 ms, our chosen live-delivery target. Clients that receive nothing or terminate remain in the throughput calculation.
+We ran three repetitions of each main condition and two of each control, for 20 runs total, shuffling the two policies within each repetition. The publisher maintained approximately 30 Objects/s per track. Unless stated otherwise, the results below are medians across runs. Raw logs, configurations, build hashes, and plotting scripts are saved in the repository.
 
-For return to live experiments, one fresh Object is not enough to count as recovery. We require a full one-second window after resume in which every received Object meets the 150 ms target, at least 80% of expected Objects arrive, and no delivery gap exceeds three frame intervals. Recovery time marks the start of that window, so we need the following second of data to confirm it. We also report how many clients recover within the ten-second observation period.
+Table 1. Focused tests of the two implemented controls. Each test uses four subscriber sessions.
 
-### From baseline behavior to recovery without disconnecting
-
-Our first 20 runs tested the unchanged relay with 16 or 64 clients and no outgoing bandwidth cap. Healthy clients stayed close to the source rate, and we did not find any consistent degradation. Previously paused clients received about 10 Mbit/s while catching up with a 4 Mbit/s source, showing that much of their traffic was backlogged. This gave us a reason to test recovery when bandwidth was limited.
-
-The next 20 runs used the 80 Mbit/s cap with 16 clients, in these cases either none or eight clients paused for 15 seconds. With a three-second termination policy, healthy clients' P99 latency during recovery fell from 190 to 11 ms. Peak relay RSS, the amount of physical memory used by the relay process, fell from 36.92 to 23.70 MiB. However, the 40 paused subscriptions across all five mixed runs were completely terminated. Ending them protected healthy clients but did not let the stalled clients recover.
-
-We then tested the ‘skip’ policy to see whether we could keep healthy clients close to live while allowing stalled clients to recover. We compared three policies under the same 80 Mbit/s cap: no timeout, ‘terminate,’ and ‘skip.’ Here, the baseline means the capped relay with its timeout disabled.
-
-In each mixed run, eight of 16 clients paused after five seconds, then had ten seconds to recover after resuming. We tested pauses of 0.25, 1, 2, and 4 seconds, with five repetitions for each policy and pause length. We also ran five healthy-only controls per policy, giving 75 runs in total. All conditions used the same relay and client builds. Table 1 compares recovery with the baseline and skip policies.
-
-Table 1. Recovery across five runs, with eight paused clients per run. For each run, we take the median recovery time among clients that recovered, then report the median of those five values. The four-second baseline time excludes ten clients that did not recover within ten seconds.
-
-| **Pause Length** | **Baseline #recovered** | **Baseline recovery time** | **Skip Policy #recovered** | **Skip Policy recovery time** |
+| Test | Demand | Client behavior | Compared policies | Runs |
 | --- | --- | --- | --- | --- |
-| 0.25 s | 40/40 | 0.088 s | 40/40 | 0.080 s |
-| 1 s | 40/40 | 1.733 s | 40/40 | 1.693 s |
-| 2 s | 40/40 | 4.104 s | 40/40 | 3.979 s |
-| 4 s | 30/40 | 8.443 s | 40/40 | 0.024 s |
+| Bandwidth | 28 Mbit/s; 12 Mbit/s cap | One 4-track client; three 1-track clients | FIFO vs. DRR | 3 each |
+| Memory | 16 Mbit/s; 64 Mbit/s cap | One of four clients pauses for 6 s | No session cap vs. 2 MiB cap | 3 each |
+| Spare bandwidth | 28 Mbit/s; 64 Mbit/s cap | Same mixed track counts | FIFO vs. DRR | 2 each |
+| Healthy memory | 16 Mbit/s; 64 Mbit/s cap | All four clients read normally | No session cap vs. 2 MiB cap | 2 each |
 
-The clearest benefit appeared with four-second pauses. The skip policy recovered all 40 stalled clients on their original connections and subscriptions, compared with 30 of 40 for the baseline. During the final five seconds of recovery, previously paused clients received about 4.00 Mbit/s of timely data with the skip policy, compared to 1.30 Mbit/s for the baseline. This means they were receiving current media at roughly the source rate again.
+### Bandwidth: does requesting more tracks buy a larger share?
 
-Healthy clients benefited too. During recovery, their P99 latency fell from 174 to 48 ms, and their timely goodput rose from 3.91 to 4.00 Mbit/s per client. The terminate policy brought P99 down further, to 13 ms, but ended all 40 paused subscriptions. The skip policy gave us a way to reduce interference while keeping those clients connected. No healthy client was terminated.
+One subscriber requests four 4 Mbit/s tracks on the same connection. The other three request one track each, giving 28 Mbit/s of total requested payload. A 12 Mbit/s application cap forces the relay to choose how to divide its bandwidth. Both FIFO and DRR use this same cap, and session/global memory enforcement is disabled in this comparison.
 
-Because these policies had the same 80 Mbit/s cap, the improvement shows that changing which media the relay sends can improve useful delivery within a fixed bandwidth allowance. This is the bandwidth benefit we have demonstrated so far. It does not establish that skip sends fewer total bytes; measuring total outgoing bytes alongside timely payload will let us test that separately.
+With FIFO, the four-track client received a median 6.68 Mbit/s, while each single-track client received 1.68 Mbit/s. With DRR, the four-track client received 2.83 Mbit/s and the others received about 2.98 Mbit/s each. Jain's fairness index rose from 0.646 to 0.9996, where 1 means equal throughput across sessions. Aggregate received payload stayed similar: 11.71 Mbit/s with FIFO and 11.76 Mbit/s with DRR. Figure 2 shows each repetition.
 
-The 24 ms median in Table 1 does not mean every client recovered that quickly. Across skip's five runs, the median recovery time ranged from 5 ms to 2.104 seconds; the slowest individual client took 2.398 seconds. Figure 2 shows the variation across runs.
+![isolation-bandwidth.png](figures/isolation-bandwidth.png)
 
-![Recovery results](../results/recovery/2026-11-10/figures/recovery.png)
+Figure 2. Per-session payload throughput and fairness under the same 12 Mbit/s application cap. Bars show medians and dots show the three runs. The dashed line is the ideal 3 Mbit/s share before framing overhead and finite-run effects.
 
-Figure 2. Individual runs and medians across pause lengths. Recovery counts include every paused client; recovery-time points include only clients that recovered.
+This is direct preliminary evidence for our bandwidth scheduler: extra tracks no longer create extra session shares. It is not yet evidence of good live-media delivery under sustained overload. The source demand exceeds the cap, so queues still grow; neither policy delivered payload within our 150 ms target during the measurement window. DRR needs a buffering or stale-media policy alongside it to address that problem. The control with spare bandwidth below checks that the scheduler also lets clients use available capacity when there is no contention.
 
-### What these results tell us
+### Memory: can we limit what a stalled session keeps alive?
 
-The shorter pauses help explain when the policy is useful. Neither timeout policy activated during pauses of 0.25, 1, or 2 seconds, so both behaved much like the baseline. All clients recovered, but a two-second pause still led to about four seconds of catch-up. During the four-second pauses, the forwarding timeout did activate, allowing skip to discard old work. Our fixed threshold can therefore help a longer stall while leaving a shorter one largely unchanged.
+For this comparison, all four subscribers request the same 4 Mbit/s track. One pauses after three seconds and resumes six seconds later. We use a 64 Mbit/s application cap, which leaves enough capacity for the healthy clients and later catch-up. Both policies have the same 512 KiB subgroup ceiling and 8 MiB global reservation cap. The only change is whether the 2 MiB session cap is enforced.
 
-The memory measurements provide an initial result for the other half of our hypothesis. With four-second pauses, median peak relay RSS during recovery fell from 26.98 MiB with the baseline to 23.81 MiB with skip, a reduction of about 12%. All 40 stalled clients recovered with skip. In this workload, the policy therefore used less peak process memory while bringing those clients back to current media.
+Without the session cap, the largest per-session reservation reached 4 MiB in every run. With the cap, it stopped at 2 MiB in every run. Peak global reservations also fell from 3.5 to 2 MiB, showing that releasing the stalled subscription's references allowed old shared groups to be freed in this workload. No run reached the 8 MiB global cap, so this comparison tests session isolation; global rejection is implemented and unit-tested but not exercised here.
 
-The memory audit in Section 4 helps explain what we need to check next. Dropping stale work may reduce both retained shared media and per-connection buffering, but RSS combines those regions with the rest of the process. We need to measure them separately to identify where the savings occur, then increase the number of stalled clients and the amount of retained media to test whether memory stays within a chosen budget. The current result shows a lower measured peak; that next comparison will test whether we can control memory growth.
+The process-memory measurements point in the same direction. Median peak relay RSS fell from 26.86 to 21.91 MiB, about 18%. The three baseline peaks ranged from 26.78 to 26.89 MiB, and the bounded-policy peaks ranged from 21.05 to 23.58 MiB. These are small local runs, and RSS includes more than our payload store, so we treat this as preliminary evidence of lower process memory rather than a general memory bound.
 
-We checked that the recovery results came from valid runs. All 75 short-pause runs passed duration checks, covering 1,200 client observations, and the publisher stayed at 29.8–30.1 Objects/s during recovery. Connection and subscription identifiers confirmed that clients recovered without reconnecting. Earlier attempts with large timing gaps were excluded and kept separately.
+![isolation-memory-results.png](figures/isolation-memory-results.png)
 
-These are still local results: the publisher, relay, and clients shared one machine. We also limited each client to one incoming media stream because overlapping groups exposed a recovery failure in the pinned library. Finally, our synthetic groups can be used independently, while a video player may need a keyframe before playback resumes. The current experiments demonstrate delivery of fresh Objects, not restored video playback.
+Figure 3. Reservation histories from the first repetition, with the six-second pause shaded. The lower panels show median peak RSS and healthy-client throughput, with all three repetitions marked. Time histories are sampled about once per second; peak values in the text use retained high-water counters. Reservations and RSS are different measurements.
+
+Healthy clients continued receiving about 4.00 Mbit/s each under both policies, with per-client P99 latency between 9.1 and 11.7 ms across the six runs. However, the fixed policy ended the stalled subscription in all three runs. The baseline allowed it to catch up after resuming. The memory improvement therefore has a real cost: the first fixed budget contains retention, but does not yet preserve a temporarily stalled subscriber's delivery.
+
+### Controls and what remains unproven
+
+With a 64 Mbit/s cap, both FIFO and DRR delivered approximately 16 Mbit/s to the four-track client and 4 Mbit/s to each single-track client in both control repetitions. That is the expected result when capacity is available: fairness should not prevent a client from using bandwidth that other clients do not need. In the healthy-only memory control, both policies delivered about 4 Mbit/s per client, and the fixed budget terminated no subscriptions in either repetition.
+
+Our earlier timeout and recovery experiments helped us establish that a client pause reaches the relay and that old forwarding work can be released. Those logs remain in the repository, but the results above evaluate the DRR and byte-budget mechanisms proposed in Report I directly. Timeout-based skipping is disabled here.
+
+The current implementation supports a standalone relay with explicit live subscriptions and subgroup streams. Unsupported delivery paths are rejected when the controls are enabled. We have not yet demonstrated isolation across a relay hierarchy, a total per-connection memory bound, or playback of encoded video. The separate bandwidth and memory comparisons also do not yet establish how the two controls behave together.
 
 ### Preparing the PACE ICE experiment
 
-PACE will let us separate the relay's resources from the machines generating its traffic. We have started work on a four-node launcher: one relay, one publisher, and two client generators that split the subscribers evenly. It requests eight CPUs and 32 GiB of memory per node for 30 minutes. The workers passed a local check of startup, client completion, logging, and cleanup using real QUIC connections. This helped us check the launcher logic, but not the PACE environment. [4, 5]
+PACE will let us separate the relay's resources from the machines generating its traffic. We have prepared a four-node launcher: one relay, one publisher, and two client generators that split the subscribers evenly. It requests eight CPUs and 32 GiB of memory per node for 30 minutes. These are requested resources; the workers record the actual CPU, RAM, OS, and network configuration when an allocation runs. [4, 5]
 
-The first PACE run will be a 20-second check with 16 clients, no pauses, and the stock relay. We will check that every client completes, delivered payloads are valid, the publisher maintains its intended rate, and the generators have CPU capacity to spare. We will also record the allocated hardware and check clock differences before using timestamps from separate machines to measure latency.
+The launcher now accepts our patched relay and matching client, checks their hashes against a build manifest, and passes through DRR, memory-budget, and multi-track settings. The analysis combines both generators' logs by subscriber session. The four worker roles passed a local integration check using real QUIC connections, including startup, delivery, logging, and cleanup. That check runs on one machine and does not validate ICE itself.
 
-Once that check passes, we will compare zero versus eight paused clients: five seconds of normal delivery, a four-second pause, and ten seconds of recovery, repeated five times per condition. The eight stalled clients will stay on one generator for this comparison. The launcher currently supports the stock-relay baseline. To test our modified policies on PACE, we still need to connect the patched Linux builds and policy settings to the launcher and combine both generators' logs for analysis. No PACE experiment has been run yet.
+To run on ICE, we still need to build the Linux binaries in a compute allocation, select the course's account settings if required, and check communication between the allocated nodes. Our guide includes these commands and the matched FIFO/DRR and memory-budget configurations. Before reporting cross-node latency, we will also verify clock offsets; throughput can be analyzed without subtracting timestamps from different machines. No PACE experiment has been run yet.
 
-### Remaining work and project scope
+The first cluster experiment will repeat a short four-client comparison to verify the setup, then increase to 32, 128, and 256 subscribers if the generators can sustain the load. For bandwidth, we will keep demand above the same application cap in both policies and include multi-track sessions. For memory, we will compare 0%, 25%, and 50% stalled clients, including clients retaining different groups or tracks so sharing does not hide the memory cost. We will check generator CPU headroom and source timing before accepting each load level.
 
-The local tests give us evidence for the policy direction proposed in Report I: skipping improved timely delivery under a fixed bandwidth cap and reduced the measured memory peak without disconnecting stalled clients. The next step is to turn those improvements into explicit control over bandwidth allocation and retained memory.
+### Remaining work
 
-DRR will test whether assigning each session a fair byte allowance improves on skipping alone. We will compare DRR, skip, and DRR plus skip under the same cap, measuring each client's share of bandwidth alongside timely delivery and recovery. This will separate the benefit of fair scheduling from the benefit of discarding stale media.
+We now have an initial implementation and a direct test of each core mechanism from Report I. DRR improved session fairness under contention, and the fixed session budget bounded retained-payload reservations while healthy clients kept receiving. The remaining work is to test their combination and improve the tradeoff between bounded buffering and useful delivery.
 
-For memory, we will use the memory ownership audit we did to measure shared retained payloads and per-connection allocations separately, then add byte budgets for sessions and the relay as a whole. With the same workload and client count, success means keeping the measured memory regions within their configured budgets while preserving healthy-client delivery and allowing stalled clients to recover. Increasing the number of stalled clients and varying group size will test where those limits start to matter.
-
-We will prioritize those two questions and move the policy comparisons to PACE. Encoded video, multiple tracks, and upstream subscription sharing would test how well the approach applies to other workloads; and they’re planned for further evaluation.
+Our next priority is to run these comparisons on PACE and vary the fixed limits, stall durations, and subscriber counts. We will then test DRR together with the session budget, measuring fairness, reservation peaks, RSS, timely delivery, and terminations in the same run. Dynamic limits based on acknowledged delivery rate, live-edge lag thresholds, encoded-video replay, and upstream subscription sharing remain later extensions. We have not implemented those features or included them in the claims above.
 
 References
 
-1. Kumar et al. **PicNIC: Predictable Virtualized NIC.** SIGCOMM 2019. [Paper.](https://natefoster.org/papers/picnic.pdf)
+1. Kumar et al. PicNIC: Predictable Virtualized NIC. SIGCOMM 2019. [Paper.](https://natefoster.org/papers/picnic.pdf)
 
-2. Gurel et al. **Media over QUIC: Initial Testing, Findings and Results.** MMSys 2023. [DOI](https://doi.org/10.1145/3587819.3593937); [authors' testbed.](https://github.com/streaming-university/public-moq-demo)
+2. Gurel et al. Media over QUIC: Initial Testing, Findings and Results. MMSys 2023. [DOI](https://doi.org/10.1145/3587819.3593937); [authors' testbed.](https://github.com/streaming-university/public-moq-demo)
 
-3. Shreedhar and Varghese. **Efficient Fair Queuing Using Deficit Round-Robin.** IEEE/ACM Transactions on Networking, 1996. [Paper.](https://web.stanford.edu/class/ee384x/EE384X/papers/DRR.pdf)
+3. Shreedhar and Varghese. Efficient Fair Queuing Using Deficit Round-Robin. IEEE/ACM Transactions on Networking, 1996. [Paper.](https://web.stanford.edu/class/ee384x/EE384X/papers/DRR.pdf)
 
 4. Georgia Tech PACE. [ICE job guide](https://gatech.service-now.com/home?id=kb_article_view&sysparm_article=KB0042096) and [storage guide](https://gatech.service-now.com/home?id=kb_article_view&sysparm_article=KB0042094), linked from the [GT teaching tutorial.](https://sites.gatech.edu/higheducation2024/tutorial/)
 
